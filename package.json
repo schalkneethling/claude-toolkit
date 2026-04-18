@@ -1,0 +1,36 @@
+{
+  "name": "@schalkneethling/toolkit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CLI for managing Claude Code hooks and skills across projects.",
+  "license": "MIT",
+  "bin": {
+    "toolkit": "./dist/index.mjs"
+  },
+  "files": [
+    "dist",
+    "hooks",
+    "!**/*.ts",
+    "skills"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "toolkit": "tsx src/index.ts",
+    "prepare": "vp pack && vp run build:hooks",
+    "build:hooks": "tsc --project tsconfig.hooks.json"
+  },
+  "dependencies": {
+    "vite-plus": "^0.1.18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@10.33.0"
+}
