@@ -31,8 +31,7 @@ const rules = [
     },
     {
         id: "chmod-777",
-        test: (c) => /\bchmod\s+(?:-[a-zA-Z]*\s+)*(?:777|[ugoa]*[+=][rwx]*w[rwx]*(?:\s|$))/.test(c) &&
-            /-R|--recursive|777/.test(c),
+        test: (c) => /\bchmod\s+(?:-[a-zA-Z]*\s+)*(?:777|[ugoa]*[+=][rwx]*w[rwx]*(?:\s|$))/.test(c) && /-R|--recursive|777/.test(c),
         message: "`chmod 777` or recursive world-writable chmod is blocked. Grant the minimum permissions required.",
     },
     {
@@ -47,7 +46,8 @@ const rules = [
     },
     {
         id: "fork-bomb",
-        test: (c) => /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(c) || /\.\s*\|\s*\.\s*&/.test(c),
+        test: (c) => /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(c) ||
+            /\.\s*\|\s*\.\s*&/.test(c),
         message: "Fork bomb pattern detected and blocked.",
     },
     {
