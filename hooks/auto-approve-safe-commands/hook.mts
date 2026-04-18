@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node
 
 /**
- * autoa-approve-safe-commands: PermissionRequest hook
+ * auto-approve-safe-commands: PermissionRequest hook
  *
  * Reads a Claude Code hook payload from stdin, inspects tool_input.command,
  * and allows safe commands that match known-safe patterns.
