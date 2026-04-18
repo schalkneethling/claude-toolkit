@@ -61,7 +61,9 @@ function readManifest(): Manifest {
   }
 
   try {
-    const parsed = JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as Partial<Manifest>;
+    const parsed = JSON.parse(
+      readFileSync(MANIFEST_PATH, "utf8"),
+    ) as Partial<Manifest>;
     return { hooks: parsed.hooks ?? {}, skills: parsed.skills ?? {} };
   } catch {
     return { hooks: {}, skills: {} };
@@ -92,7 +94,7 @@ function deepMerge<T>(target: T, source: T): T {
 }
 
 function hashHookSource(name: string): string {
-  const p = join(HOOKS_SRC, name, "hook.ts");
+  const p = join(HOOKS_SRC, name, "hook.mjs");
   return shortHash(readFileSync(p));
 }
 
@@ -167,7 +169,7 @@ function addHook(name: string): void {
     process.exit(1);
   }
 
-  const hookSrc = join(srcDir, "hook.ts");
+  const hookSrc = join(srcDir, "hook.mjs");
   const fragmentPath = join(srcDir, "settings-fragment.json");
 
   const hooksDir = join(CLAUDE_DIR, "hooks");
@@ -178,7 +180,9 @@ function addHook(name: string): void {
   if (existsSync(fragmentPath)) {
     const fragment = JSON.parse(readFileSync(fragmentPath, "utf8"));
     const settingsPath = join(CLAUDE_DIR, "settings.json");
-    const current = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, "utf8")) : {};
+    const current = existsSync(settingsPath)
+      ? JSON.parse(readFileSync(settingsPath, "utf8"))
+      : {};
     const merged = deepMerge(current, fragment);
     writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + "\n");
   }
@@ -250,10 +254,13 @@ async function update(force: boolean): Promise<void> {
 
     const sourceHash = hashHookSource(name);
     const installedPath = join(CLAUDE_DIR, "hooks", `${name}.ts`);
-    const installedHash = existsSync(installedPath) ? shortHash(readFileSync(installedPath)) : null;
+    const installedHash = existsSync(installedPath)
+      ? shortHash(readFileSync(installedPath))
+      : null;
 
     const sourceChanged = sourceHash !== entry.hash;
-    const locallyModified = installedHash !== null && installedHash !== entry.hash;
+    const locallyModified =
+      installedHash !== null && installedHash !== entry.hash;
 
     if (!sourceChanged && !locallyModified) {
       continue;
@@ -269,8 +276,10 @@ async function update(force: boolean): Promise<void> {
     }
 
     if (sourceChanged) {
-      const oldSrc = existsSync(installedPath) ? readFileSync(installedPath, "utf8") : "";
-      const newSrc = readFileSync(join(srcDir, "hook.ts"), "utf8");
+      const oldSrc = existsSync(installedPath)
+        ? readFileSync(installedPath, "utf8")
+        : "";
+      const newSrc = readFileSync(join(srcDir, "hook.mjs"), "utf8");
       console.log(`\n~ hook: ${name} (${entry.hash} → ${sourceHash})`);
       console.log(diffLines(oldSrc, newSrc));
       const ok = force || (await confirm(`Update hook "${name}"?`));
