@@ -174,7 +174,7 @@ function addHook(name: string): void {
 
   const hooksDir = join(CLAUDE_DIR, "hooks");
   mkdirSync(hooksDir, { recursive: true });
-  const destHook = join(hooksDir, `${name}.ts`);
+  const destHook = join(hooksDir, `${name}.mjs`);
   writeFileSync(destHook, readFileSync(hookSrc));
 
   if (existsSync(fragmentPath)) {
@@ -253,7 +253,7 @@ async function update(force: boolean): Promise<void> {
     }
 
     const sourceHash = hashHookSource(name);
-    const installedPath = join(CLAUDE_DIR, "hooks", `${name}.ts`);
+    const installedPath = join(CLAUDE_DIR, "hooks", `${name}.mjs`);
     const installedHash = existsSync(installedPath)
       ? shortHash(readFileSync(installedPath))
       : null;
