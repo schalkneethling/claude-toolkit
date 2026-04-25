@@ -19,7 +19,19 @@ function generateCSRFToken(session) {
 // Middleware validation
 function validateCSRF(req, res, next) {
   const token = req.headers['x-csrf-token'] || req.body._csrf;
-  if (!token || token !== req.session.csrfToken) {
+  const sessionToken = req.session.csrfToken;
+
+  if (typeof token !== 'string' || typeof sessionToken !== 'string') {
+    return res.status(403).json({ error: 'Invalid CSRF token' });
+  }
+
+  const tokenBuffer = Buffer.from(token);
+  const sessionTokenBuffer = Buffer.from(sessionToken);
+
+  if (
+    tokenBuffer.length !== sessionTokenBuffer.length ||
+    !crypto.timingSafeEqual(tokenBuffer, sessionTokenBuffer)
+  ) {
     return res.status(403).json({ error: 'Invalid CSRF token' });
   }
   next();
@@ -76,37 +88,168 @@ function validateFetchMetadata(req, res, next) {
   const site = req.headers['sec-fetch-site'];
   const mode = req.headers['sec-fetch-mode'];
   const dest = req.headers['sec-fetch-dest'];
+  const method = req.method;
 
   // Allow same-origin requests
   if (site === 'same-origin') return next();
 
-  // Allow browser navigation requests
+  // Allow user-initiated browser navigations
   if (site === 'none') return next();
 
-  // Block cross-origin requests to sensitive endpoints
-  if (site === 'cross-site') {
-    return res.status(403).json({ error: 'Cross-site request blocked' });
+  // Allow same-site top-level navigations and safe methods
+  if (
+    site === 'same-site' &&
+    (mode === 'navigate' || ['GET', 'HEAD', 'OPTIONS'].includes(method))
+  ) {
+    return next();
   }
 
-  // Allow same-site requests for non-sensitive operations
-  if (site === 'same-site' && mode === 'navigate') return next();
-
-  next();
+  return res.status(403).json({ error: 'Fetch metadata validation failed' });
 }
 ```
 
 ## Framework Integration
 
-### Express.js with csurf
+### Express.js with Signed Double-Submit Tokens
 
 ```javascript
-const csrf = require('csurf');
-const csrfProtection = csrf({ cookie: true });
+const crypto = require('crypto');
 
-app.use(csrfProtection);
+const CSRF_COOKIE_NAME = 'csrf_token';
+const CSRF_SECRET = Buffer.from(process.env.CSRF_SECRET, 'hex');
 
-app.get('/form', (req, res) => {
-  res.render('form', { csrfToken: req.csrfToken() });
+function signToken(sessionId, nonce) {
+  return crypto
+    .createHmac('sha256', CSRF_SECRET)
+    .update(`${sessionId}:${nonce}`)
+    .digest('base64url');
+}
+
+function constantTimeEqual(value, expected) {
+  if (typeof value !== 'string' || typeof expected !== 'string') return false;
+
+  const valueBuffer = Buffer.from(value);
+  const expectedBuffer = Buffer.from(expected);
+
+  return (
+    valueBuffer.length === expectedBuffer.length &&
+    crypto.timingSafeEqual(valueBuffer, expectedBuffer)
+  );
+}
+
+function generateToken(req) {
+  const nonce = crypto.randomBytes(32).toString('base64url');
+  const signature = signToken(req.session.id, nonce);
+  return `${nonce}.${signature}`;
+}
+
+function sendToken(req, res, next) {
+  const token = generateToken(req);
+
+  res.cookie(CSRF_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Strict'
+  });
+
+  res.locals.csrfToken = token;
+  next();
+}
+
+function verifyToken(req, res, next) {
+  const token = req.headers['x-csrf-token'] || req.body._csrf;
+  const cookieToken = req.cookies[CSRF_COOKIE_NAME];
+
+  if (!constantTimeEqual(token, cookieToken)) {
+    return res.status(403).json({ error: 'Invalid CSRF token' });
+  }
+
+  const [nonce, signature, extra] = cookieToken.split('.');
+  if (extra || !nonce || !signature) {
+    return res.status(403).json({ error: 'Invalid CSRF token' });
+  }
+
+  if (!constantTimeEqual(signature, signToken(req.session.id, nonce))) {
+    return res.status(403).json({ error: 'Invalid CSRF token' });
+  }
+
+  next();
+}
+
+app.get('/form', sendToken, (req, res) => {
+  res.render('form', { csrfToken: res.locals.csrfToken });
+});
+
+app.post('/submit', verifyToken, (req, res) => {
+  res.json({ ok: true });
+});
+```
+
+Example tests for token issuance and verification:
+
+```javascript
+const assert = require('node:assert/strict');
+const test = require('node:test');
+
+test('sendToken issues a cookie and exposes a form token', () => {
+  const req = { session: { id: 'session-123' } };
+  const res = {
+    locals: {},
+    cookie(name, value, options) {
+      this.cookieArgs = { name, value, options };
+    }
+  };
+
+  sendToken(req, res, () => {});
+
+  assert.equal(res.cookieArgs.name, CSRF_COOKIE_NAME);
+  assert.equal(res.locals.csrfToken, res.cookieArgs.value);
+  assert.equal(res.cookieArgs.options.httpOnly, true);
+  assert.equal(res.cookieArgs.options.sameSite, 'Strict');
+});
+
+test('verifyToken accepts a matching signed token', () => {
+  const req = { session: { id: 'session-123' } };
+  const token = generateToken(req);
+  let called = false;
+
+  verifyToken(
+    {
+      ...req,
+      headers: { 'x-csrf-token': token },
+      body: {},
+      cookies: { [CSRF_COOKIE_NAME]: token }
+    },
+    {},
+    () => {
+      called = true;
+    }
+  );
+
+  assert.equal(called, true);
+});
+
+test('verifyToken rejects mismatched or tampered tokens', () => {
+  const req = {
+    session: { id: 'session-123' },
+    headers: { 'x-csrf-token': 'tampered.token' },
+    body: {},
+    cookies: { [CSRF_COOKIE_NAME]: generateToken({ session: { id: 'session-123' } }) }
+  };
+  const res = {
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+    }
+  };
+
+  verifyToken(req, res, () => {});
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, { error: 'Invalid CSRF token' });
 });
 ```
 

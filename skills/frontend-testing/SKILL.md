@@ -53,7 +53,7 @@ For each criterion, identify:
 - **Error cases**: Invalid inputs, failures
 
 Example mapping:
-```
+```text
 Criterion: "User can filter products by category"
 ├─ Happy path: Select category, products filter correctly
 ├─ Edge case: No products match filter, show empty state
@@ -72,7 +72,7 @@ After acceptance tests pass, add unit tests for implementation robustness:
 - **Complex branching logic** hard to exercise through integration tests
 - **Performance-sensitive code** that needs specific validation
 
-```
+```text
 Function: filterProducts(products, category)
 ├─ Acceptance: Returns matching products (from criteria)
 ├─ Implementation: Returns empty array when products is null
@@ -256,7 +256,7 @@ Tests that only verify internals without validating meaningful behavior:
 ```javascript
 // BAD: Tests internal method exists, provides no behavior guarantee
 it("has a validateFields method", () => {
-  expect(form.#validateFields).toBeDefined();
+  expect(typeof form.validateFields).toBe("function");
 });
 
 // BAD: Asserts implementation without verifying outcome
@@ -295,10 +295,12 @@ expect(formatPrice(100)).toBe("$100.00");
 ### Over-Mocking
 
 ```javascript
+import { vi } from "vitest";
+
 // BAD: Mock everything, test nothing real
-jest.mock("./api");
-jest.mock("./utils");
-jest.mock("./formatter");
+vi.mock("./api");
+vi.mock("./utils");
+vi.mock("./formatter");
 // Now just testing mocks talk to each other
 
 // GOOD: Mock only external boundaries

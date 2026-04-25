@@ -212,8 +212,11 @@ function safeExtractZip(zipPath, destDir, maxSize = 100 * 1024 * 1024) {
 
   for (const entry of entries) {
     // Check for path traversal
-    const entryPath = path.join(destDir, entry.entryName);
-    if (!entryPath.startsWith(path.resolve(destDir))) {
+    const resolvedDest = path.resolve(destDir);
+    const resolvedEntry = path.resolve(destDir, entry.entryName);
+    const relativeEntry = path.relative(resolvedDest, resolvedEntry);
+
+    if (relativeEntry.startsWith('..') || path.isAbsolute(relativeEntry)) {
       throw new Error('Path traversal detected');
     }
 
@@ -266,7 +269,7 @@ const upload = multer({
 // Upload endpoint
 app.post('/upload',
   requireAuth,           // Authentication
-  csrfProtection,        // CSRF token
+  verifyToken,           // CSRF token
   upload.single('file'), // File handling
   async (req, res) => {
     try {

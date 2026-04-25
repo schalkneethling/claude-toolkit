@@ -163,8 +163,11 @@ When strict matching fails:
 ```javascript
 // Get all, then filter
 const buttons = await page.getByRole("button").all();
-const deleteButtons = buttons.filter(b => 
-  b.textContent.includes("Delete")
+const buttonTexts = await Promise.all(
+  buttons.map(button => button.textContent())
+);
+const deleteButtons = buttons.filter((button, index) =>
+  buttonTexts[index]?.includes("Delete")
 );
 
 // Or be more specific with the query

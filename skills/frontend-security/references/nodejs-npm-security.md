@@ -87,10 +87,12 @@ const filePath = `/uploads/${userInput}`;
 
 // SAFE - validate and resolve path
 function safeReadFile(userInput, baseDir) {
-  const safePath = path.resolve(baseDir, path.basename(userInput));
+  const basePath = path.resolve(baseDir);
+  const safePath = path.resolve(basePath, userInput);
+  const relativePath = path.relative(basePath, safePath);
 
   // Verify path is within allowed directory
-  if (!safePath.startsWith(path.resolve(baseDir))) {
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
     throw new Error('Invalid file path');
   }
 
@@ -230,15 +232,15 @@ required.forEach(varName => {
 const evilRegex = /^(a+)+$/;
 evilRegex.test('aaaaaaaaaaaaaaaaaaaaaaaaaaa!'); // Hangs
 
-// Use safe-regex to check patterns
+// Heuristic only: safe-regex can have false positives/negatives for ReDoS
 const safe = require('safe-regex');
 if (!safe(userProvidedRegex)) {
   throw new Error('Unsafe regex pattern');
 }
 
-// Or use re2 for guaranteed linear time
+// Preferred for untrusted patterns: use RE2 for guaranteed linear time
 const RE2 = require('re2');
-const pattern = new RE2('^[a-z]+$');
+const pattern = new RE2(userProvidedRegex);
 ```
 
 ## NPM Security Checklist

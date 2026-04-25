@@ -166,7 +166,7 @@ app.post('/refresh', async (req, res) => {
     }
 
     // Check if refresh token is revoked
-    if (await isTokenRevoked(refreshToken)) {
+    if (await isTokenRevoked(decoded)) {
       throw new Error('Token revoked');
     }
 
@@ -193,20 +193,23 @@ JWTs are stateless, so revocation requires additional mechanisms:
 const revokedTokens = new Map();  // Use Redis in production
 
 function revokeToken(token) {
-  const decoded = jwt.decode(token);
+  const decoded = jwt.verify(token, secret, { algorithms: ['HS256'] });
   const tokenId = decoded.jti;
   const expiry = decoded.exp * 1000;
+
+  if (!tokenId || !expiry) {
+    throw new Error('Token missing required revocation claims');
+  }
 
   // Store until token expires
   revokedTokens.set(tokenId, expiry);
 
   // Clean up expired entries periodically
-  setTimeout(() => revokedTokens.delete(tokenId), expiry - Date.now());
+  setTimeout(() => revokedTokens.delete(tokenId), Math.max(0, expiry - Date.now()));
 }
 
-function isTokenRevoked(token) {
-  const decoded = jwt.decode(token);
-  return revokedTokens.has(decoded.jti);
+function isTokenRevoked(decoded) {
+  return Boolean(decoded.jti) && revokedTokens.has(decoded.jti);
 }
 
 // Include jti (JWT ID) in tokens
@@ -266,7 +269,7 @@ function authenticateToken(req, res, next) {
     }
 
     // Check revocation
-    if (isTokenRevoked(token)) {
+    if (isTokenRevoked(decoded)) {
       throw new Error('Token revoked');
     }
 

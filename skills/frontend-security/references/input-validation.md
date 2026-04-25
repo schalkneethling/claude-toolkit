@@ -146,10 +146,12 @@ db.query(query, [userInput]);
 const path = require('path');
 
 function validateFilePath(userPath, baseDir) {
+  const baseCanonical = path.resolve(baseDir);
   const resolved = path.resolve(baseDir, userPath);
+  const relativePath = path.relative(baseCanonical, resolved);
 
-  // Ensure resolved path starts with base directory
-  if (!resolved.startsWith(path.resolve(baseDir))) {
+  // Ensure resolved path stays inside the base directory
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
     throw new Error('Path traversal detected');
   }
 
