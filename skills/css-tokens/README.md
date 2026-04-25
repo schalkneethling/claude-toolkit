@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-1. Install the skill in your project (see [main repo README](https://github.com/schalkneethling/webdev-agent-skills))
+1. Install the skill in your project (see [main repo README](https://github.com/schalkneethling/claude-toolkit))
 2. Import `tokens.css` in your main stylesheet or HTML
 3. Start using tokens: `var(--color-primary)`, `var(--size-16)`, etc.
 
