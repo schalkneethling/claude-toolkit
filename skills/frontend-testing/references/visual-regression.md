@@ -304,7 +304,7 @@ Font rendering varies by OS. Options:
   
 - name: Upload diff artifacts on failure
   if: failure()
-  uses: actions/upload-artifact@v3
+  uses: actions/upload-artifact@v7
   with:
     name: visual-diff
     path: test-results/
