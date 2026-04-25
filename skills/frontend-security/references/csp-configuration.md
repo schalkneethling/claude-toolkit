@@ -65,6 +65,12 @@ echo -n 'console.log("hello");' | openssl sha256 -binary | openssl base64
 ```javascript
 const helmet = require('helmet');
 
+// Nonce middleware
+app.use((req, res, next) => {
+  res.locals.nonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
+
 app.use(helmet.contentSecurityPolicy({
   directives: {
     defaultSrc: ["'self'"],
@@ -77,12 +83,6 @@ app.use(helmet.contentSecurityPolicy({
     frameAncestors: ["'self'"]
   }
 }));
-
-// Nonce middleware
-app.use((req, res, next) => {
-  res.locals.nonce = crypto.randomBytes(16).toString('base64');
-  next();
-});
 ```
 
 ### Astro
