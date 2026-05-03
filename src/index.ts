@@ -27,7 +27,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createInterface } from "node:readline/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -176,7 +176,18 @@ function diffLines(oldStr: string, newStr: string): string {
 
 // ---------- commands ----------
 
+function sanitizeName(name: string, kind: string): string {
+  name = basename(name);
+  if (!name) {
+    console.error(`Invalid ${kind} name`);
+    process.exit(1);
+  }
+  return name;
+}
+
 function addCommand(name: string): void {
+  name = sanitizeName(name, "command");
+
   const src = join(COMMANDS_SRC, `${name}.md`);
   if (!existsSync(src)) {
     console.error(`Command not found: ${name}`);
@@ -185,7 +196,11 @@ function addCommand(name: string): void {
 
   const commandsDir = join(CLAUDE_DIR, "commands");
   mkdirSync(commandsDir, { recursive: true });
-  const dest = join(commandsDir, `${name}.md`);
+  const dest = resolve(commandsDir, `${name}.md`);
+  if (!dest.startsWith(commandsDir + sep)) {
+    console.error("Invalid command name");
+    process.exit(1);
+  }
   writeFileSync(dest, readFileSync(src));
 
   const manifest = readManifest();
@@ -199,6 +214,8 @@ function addCommand(name: string): void {
 }
 
 function addHook(name: string): void {
+  name = sanitizeName(name, "hook");
+
   const srcDir = join(HOOKS_SRC, name);
   if (!existsSync(srcDir)) {
     console.error(`Hook not found: ${name}`);
@@ -210,7 +227,11 @@ function addHook(name: string): void {
 
   const hooksDir = join(CLAUDE_DIR, "hooks");
   mkdirSync(hooksDir, { recursive: true });
-  const destHook = join(hooksDir, `${name}.mjs`);
+  const destHook = resolve(hooksDir, `${name}.mjs`);
+  if (!destHook.startsWith(hooksDir + sep)) {
+    console.error("Invalid hook name");
+    process.exit(1);
+  }
   writeFileSync(destHook, readFileSync(hookSrc));
 
   if (existsSync(fragmentPath)) {
@@ -231,13 +252,19 @@ function addHook(name: string): void {
 }
 
 function addSkill(name: string, links: string[]): void {
+  name = sanitizeName(name, "skill");
+
   const srcDir = join(SKILLS_SRC, name);
   if (!existsSync(srcDir) || !statSync(srcDir).isDirectory()) {
     console.error(`Skill not found: ${name}`);
     process.exit(1);
   }
 
-  const destDir = join(TOOLKIT_DIR, "skills", name);
+  const destDir = resolve(TOOLKIT_DIR, "skills", name);
+  if (!destDir.startsWith(join(TOOLKIT_DIR, "skills") + sep)) {
+    console.error("Invalid skill name");
+    process.exit(1);
+  }
   mkdirSync(dirname(destDir), { recursive: true });
   cpSync(srcDir, destDir, { recursive: true });
 
