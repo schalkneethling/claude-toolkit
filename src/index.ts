@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 
 /**
- * toolkit — personal CLI for managing Claude Code hooks and skills.
+ * toolkit — personal CLI for managing Claude Code hooks, skills, and commands.
  *
  * Commands:
  *   toolkit add hook <name>
  *   toolkit add skill <name> [--link <target>...]
+ *   toolkit add command <name>
  *   toolkit update [--force]
  *   toolkit list hook
  *   toolkit list skill
+ *   toolkit list command
  */
 
 import { createHash } from "node:crypto";
@@ -32,6 +34,7 @@ import { parseArgs } from "node:util";
 const TOOLKIT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const HOOKS_SRC = join(TOOLKIT_ROOT, "hooks");
 const SKILLS_SRC = join(TOOLKIT_ROOT, "skills");
+const COMMANDS_SRC = join(TOOLKIT_ROOT, "commands");
 
 const PROJECT_ROOT = process.cwd();
 const CLAUDE_DIR = join(PROJECT_ROOT, ".claude");
@@ -40,7 +43,9 @@ const MANIFEST_PATH = join(CLAUDE_DIR, "toolkit-manifest.json");
 
 type HookEntry = { hash: string; installedAt: string };
 type SkillEntry = { hash: string; installedAt: string; linkedTo: string[] };
+type CommandEntry = { hash: string; installedAt: string };
 type Manifest = {
+  commands: Record<string, CommandEntry>;
   hooks: Record<string, HookEntry>;
   skills: Record<string, SkillEntry>;
 };
@@ -57,16 +62,20 @@ function shortHash(content: string | Buffer): string {
 
 function readManifest(): Manifest {
   if (!existsSync(MANIFEST_PATH)) {
-    return { hooks: {}, skills: {} };
+    return { commands: {}, hooks: {}, skills: {} };
   }
 
   try {
     const parsed = JSON.parse(
       readFileSync(MANIFEST_PATH, "utf8"),
     ) as Partial<Manifest>;
-    return { hooks: parsed.hooks ?? {}, skills: parsed.skills ?? {} };
+    return {
+      commands: parsed.commands ?? {},
+      hooks: parsed.hooks ?? {},
+      skills: parsed.skills ?? {},
+    };
   } catch {
-    return { hooks: {}, skills: {} };
+    return { commands: {}, hooks: {}, skills: {} };
   }
 }
 
@@ -91,6 +100,11 @@ function deepMerge<T>(target: T, source: T): T {
     return out as T;
   }
   return source;
+}
+
+function hashCommandSource(name: string): string {
+  const p = join(COMMANDS_SRC, `${name}.md`);
+  return shortHash(readFileSync(p));
 }
 
 function hashHookSource(name: string): string {
@@ -161,6 +175,28 @@ function diffLines(oldStr: string, newStr: string): string {
 }
 
 // ---------- commands ----------
+
+function addCommand(name: string): void {
+  const src = join(COMMANDS_SRC, `${name}.md`);
+  if (!existsSync(src)) {
+    console.error(`Command not found: ${name}`);
+    process.exit(1);
+  }
+
+  const commandsDir = join(CLAUDE_DIR, "commands");
+  mkdirSync(commandsDir, { recursive: true });
+  const dest = join(commandsDir, `${name}.md`);
+  writeFileSync(dest, readFileSync(src));
+
+  const manifest = readManifest();
+  manifest.commands[name] = {
+    hash: hashCommandSource(name),
+    installedAt: today(),
+  };
+  writeManifest(manifest);
+
+  console.log(`Installed command: ${name} → ${relative(PROJECT_ROOT, dest)}`);
+}
 
 function addHook(name: string): void {
   const srcDir = join(HOOKS_SRC, name);
@@ -320,12 +356,53 @@ async function update(force: boolean): Promise<void> {
     };
   }
 
+  for (const [name, entry] of Object.entries(manifest.commands)) {
+    const src = join(COMMANDS_SRC, `${name}.md`);
+    if (!existsSync(src)) {
+      continue;
+    }
+
+    const sourceHash = hashCommandSource(name);
+    if (sourceHash === entry.hash) {
+      continue;
+    }
+
+    changed = true;
+    console.log(`\n~ command: ${name} (${entry.hash} → ${sourceHash})`);
+    const ok = force || (await confirm(`Update command "${name}"?`));
+    if (!ok) {
+      continue;
+    }
+
+    const dest = join(CLAUDE_DIR, "commands", `${name}.md`);
+    writeFileSync(dest, readFileSync(src));
+    manifest.commands[name] = { hash: sourceHash, installedAt: today() };
+  }
+
   if (changed) {
     writeManifest(manifest);
   }
 }
 
-function list(kind: "hook" | "skill"): void {
+function list(kind: "hook" | "skill" | "command"): void {
+  if (kind === "command") {
+    if (!existsSync(COMMANDS_SRC)) {
+      console.log("(no commands available)");
+      return;
+    }
+    const files = readdirSync(COMMANDS_SRC)
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => f.replace(/\.md$/, ""));
+    if (files.length === 0) {
+      console.log("(no commands available)");
+      return;
+    }
+    for (const name of files) {
+      console.log(`${name}  ${hashCommandSource(name)}`);
+    }
+    return;
+  }
+
   const dir = kind === "hook" ? HOOKS_SRC : SKILLS_SRC;
   if (!existsSync(dir)) {
     console.log(`(no ${kind}s available)`);
@@ -353,9 +430,11 @@ function usage(): never {
     `Usage:
   toolkit add hook <name>
   toolkit add skill <name> [--link <target>]...
+  toolkit add command <name>
   toolkit update [--force]
   toolkit list hook
-  toolkit list skill`,
+  toolkit list skill
+  toolkit list command`,
   );
   process.exit(1);
 }
@@ -396,13 +475,25 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "add" && resource === "command") {
+    if (!name) {
+      usage();
+    }
+
+    addCommand(name);
+    return;
+  }
+
   if (command === "update") {
     await update(force);
     return;
   }
 
-  if (command === "list" && (resource === "hook" || resource === "skill")) {
-    list(resource);
+  if (
+    command === "list" &&
+    (resource === "hook" || resource === "skill" || resource === "command")
+  ) {
+    list(resource as "hook" | "skill" | "command");
     return;
   }
 
