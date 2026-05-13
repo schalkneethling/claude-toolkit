@@ -7,10 +7,12 @@
  *   toolkit add hook <name>
  *   toolkit add skill <name> [--link <target>...]
  *   toolkit add command <name>
+ *   toolkit add collections <name>
  *   toolkit update [--force]
  *   toolkit list hook
  *   toolkit list skill
  *   toolkit list command
+ *   toolkit list collections
  */
 
 import { createHash } from "node:crypto";
@@ -35,6 +37,7 @@ const TOOLKIT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const HOOKS_SRC = join(TOOLKIT_ROOT, "hooks");
 const SKILLS_SRC = join(TOOLKIT_ROOT, "skills");
 const COMMANDS_SRC = join(TOOLKIT_ROOT, "commands");
+const CONFIG_PATH = join(TOOLKIT_ROOT, "config.json");
 
 const PROJECT_ROOT = process.cwd();
 const CLAUDE_DIR = join(PROJECT_ROOT, ".claude");
@@ -48,6 +51,21 @@ type Manifest = {
   commands: Record<string, CommandEntry>;
   hooks: Record<string, HookEntry>;
   skills: Record<string, SkillEntry>;
+};
+type CollectionItemKind = "command" | "hook" | "skill";
+type CollectionItemConfig = {
+  type: CollectionItemKind | `${CollectionItemKind}s`;
+  src: string;
+};
+type CollectionConfig = {
+  name: string;
+  items: CollectionItemConfig[];
+};
+type ResolvedCollectionItem = {
+  collection: string;
+  sourcePath: string;
+  sourceName: string;
+  type: CollectionItemKind;
 };
 
 // ---------- helpers ----------
@@ -185,10 +203,165 @@ function sanitizeName(name: string, kind: string): string {
   return name;
 }
 
-function addCommand(name: string): void {
-  name = sanitizeName(name, "command");
+function normalizeCollectionItemType(
+  type: CollectionItemConfig["type"],
+  collectionName: string,
+): CollectionItemKind {
+  if (type === "command" || type === "commands") {
+    return "command";
+  }
+  if (type === "hook" || type === "hooks") {
+    return "hook";
+  }
+  if (type === "skill" || type === "skills") {
+    return "skill";
+  }
 
-  const src = join(COMMANDS_SRC, `${name}.md`);
+  throw new Error(
+    `Collection "${collectionName}" has unsupported item type "${type}"`,
+  );
+}
+
+function resolveSourcePath(src: string, kind: string, collectionName: string): string {
+  const sourcePath = resolve(TOOLKIT_ROOT, src);
+  if (!sourcePath.startsWith(TOOLKIT_ROOT + sep)) {
+    throw new Error(
+      `Collection "${collectionName}" ${kind} source must stay within the toolkit root: ${src}`,
+    );
+  }
+  return sourcePath;
+}
+
+function inferItemNameFromSource(
+  type: CollectionItemKind,
+  sourcePath: string,
+  collectionName: string,
+): string {
+  if (type === "command") {
+    if (
+      dirname(sourcePath) !== COMMANDS_SRC ||
+      !sourcePath.startsWith(COMMANDS_SRC + sep) ||
+      !sourcePath.endsWith(".md")
+    ) {
+      throw new Error(
+        `Collection "${collectionName}" command source must point to a markdown file directly under commands/: ${relative(TOOLKIT_ROOT, sourcePath)}`,
+      );
+    }
+    return basename(sourcePath, ".md");
+  }
+
+  const expectedRoot = type === "hook" ? HOOKS_SRC : SKILLS_SRC;
+  if (dirname(sourcePath) !== expectedRoot || !sourcePath.startsWith(expectedRoot + sep)) {
+    throw new Error(
+      `Collection "${collectionName}" ${type} source must point to a top-level entry under ${relative(TOOLKIT_ROOT, expectedRoot)}/: ${relative(TOOLKIT_ROOT, sourcePath)}`,
+    );
+  }
+
+  return basename(sourcePath);
+}
+
+function readCollectionsConfig(): CollectionConfig[] {
+  if (!existsSync(CONFIG_PATH)) {
+    throw new Error(
+      `Collections config not found: ${relative(TOOLKIT_ROOT, CONFIG_PATH)}`,
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+  } catch (error) {
+    throw new Error(
+      `Invalid collections config in ${relative(TOOLKIT_ROOT, CONFIG_PATH)}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("Collections config must be an array");
+  }
+
+  const names = new Set<string>();
+  return parsed.map((entry, index) => {
+    if (!isPlainObject(entry)) {
+      throw new Error(`Collection at index ${index} must be an object`);
+    }
+
+    const { name, items } = entry;
+    if (typeof name !== "string" || name.trim().length === 0) {
+      throw new Error(`Collection at index ${index} must have a non-empty name`);
+    }
+    if (names.has(name)) {
+      throw new Error(`Duplicate collection name: ${name}`);
+    }
+    names.add(name);
+
+    if (!Array.isArray(items)) {
+      throw new Error(`Collection "${name}" must have an items array`);
+    }
+
+    const validatedItems = items.map((item, itemIndex) => {
+      if (!isPlainObject(item)) {
+        throw new Error(
+          `Collection "${name}" item at index ${itemIndex} must be an object`,
+        );
+      }
+      if (typeof item.type !== "string" || item.type.trim().length === 0) {
+        throw new Error(
+          `Collection "${name}" item at index ${itemIndex} must have a non-empty type`,
+        );
+      }
+      if (typeof item.src !== "string" || item.src.trim().length === 0) {
+        throw new Error(
+          `Collection "${name}" item at index ${itemIndex} must have a non-empty src`,
+        );
+      }
+
+      return {
+        type: item.type as CollectionItemConfig["type"],
+        src: item.src,
+      };
+    });
+
+    return {
+      name,
+      items: validatedItems,
+    };
+  });
+}
+
+function resolveCollection(name: string): ResolvedCollectionItem[] {
+  const collectionName = sanitizeName(name, "collection");
+  const collections = readCollectionsConfig();
+  const collection = collections.find((entry) => entry.name === collectionName);
+
+  if (!collection) {
+    throw new Error(`Collection not found: ${collectionName}`);
+  }
+
+  const deduped = new Map<string, ResolvedCollectionItem>();
+
+  for (const item of collection.items) {
+    const type = normalizeCollectionItemType(item.type, collection.name);
+    const sourcePath = resolveSourcePath(item.src, type, collection.name);
+    const sourceName = inferItemNameFromSource(type, sourcePath, collection.name);
+    const key = `${type}:${sourceName}`;
+
+    if (!deduped.has(key)) {
+      deduped.set(key, {
+        collection: collection.name,
+        sourcePath,
+        sourceName,
+        type,
+      });
+    }
+  }
+
+  return [...deduped.values()];
+}
+
+function installCommand(name: string, src: string): void {
   if (!existsSync(src)) {
     console.error(`Command not found: ${name}`);
     process.exit(1);
@@ -213,10 +386,12 @@ function addCommand(name: string): void {
   console.log(`Installed command: ${name} → ${relative(PROJECT_ROOT, dest)}`);
 }
 
-function addHook(name: string): void {
-  name = sanitizeName(name, "hook");
+function addCommand(name: string): void {
+  name = sanitizeName(name, "command");
+  installCommand(name, join(COMMANDS_SRC, `${name}.md`));
+}
 
-  const srcDir = join(HOOKS_SRC, name);
+function installHook(name: string, srcDir: string): void {
   if (!existsSync(srcDir)) {
     console.error(`Hook not found: ${name}`);
     process.exit(1);
@@ -251,10 +426,12 @@ function addHook(name: string): void {
   console.log(`Installed hook: ${name} → ${relative(PROJECT_ROOT, destHook)}`);
 }
 
-function addSkill(name: string, links: string[]): void {
-  name = sanitizeName(name, "skill");
+function addHook(name: string): void {
+  name = sanitizeName(name, "hook");
+  installHook(name, join(HOOKS_SRC, name));
+}
 
-  const srcDir = join(SKILLS_SRC, name);
+function installSkill(name: string, srcDir: string, links: string[]): void {
   if (!existsSync(srcDir) || !statSync(srcDir).isDirectory()) {
     console.error(`Skill not found: ${name}`);
     process.exit(1);
@@ -293,6 +470,56 @@ function addSkill(name: string, links: string[]): void {
   console.log(`Installed skill: ${name} → ${relative(PROJECT_ROOT, destDir)}`);
   for (const l of resolvedLinks) {
     console.log(`  linked: ${join(l, name)}`);
+  }
+}
+
+function addSkill(name: string, links: string[]): void {
+  name = sanitizeName(name, "skill");
+  installSkill(name, join(SKILLS_SRC, name), links);
+}
+
+function addCollection(name: string): void {
+  const items = resolveCollection(name);
+  for (const item of items) {
+    if (!existsSync(item.sourcePath)) {
+      throw new Error(
+        `Collection "${item.collection}" references missing ${item.type} source: ${relative(TOOLKIT_ROOT, item.sourcePath)}`,
+      );
+    }
+
+    const itemStats = statSync(item.sourcePath);
+    const actualKind = itemStats.isFile()
+      ? "file"
+      : itemStats.isDirectory()
+        ? "directory"
+        : "other";
+
+    if (item.type === "command") {
+      if (!itemStats.isFile()) {
+        throw new Error(
+          `Collection "${item.collection}" expected command source "${item.sourcePath}" to be a file, found ${actualKind}`,
+        );
+      }
+      installCommand(item.sourceName, item.sourcePath);
+      continue;
+    }
+
+    if (item.type === "hook") {
+      if (!itemStats.isDirectory()) {
+        throw new Error(
+          `Collection "${item.collection}" expected hook source "${item.sourcePath}" to be a directory, found ${actualKind}`,
+        );
+      }
+      installHook(item.sourceName, item.sourcePath);
+      continue;
+    }
+
+    if (!itemStats.isDirectory()) {
+      throw new Error(
+        `Collection "${item.collection}" expected skill source "${item.sourcePath}" to be a directory, found ${actualKind}`,
+      );
+    }
+    installSkill(item.sourceName, item.sourcePath, []);
   }
 }
 
@@ -450,6 +677,18 @@ function list(kind: "hook" | "skill" | "command"): void {
   }
 }
 
+function listCollections(): void {
+  const collections = readCollectionsConfig();
+  if (collections.length === 0) {
+    console.log("(no collections available)");
+    return;
+  }
+
+  for (const collection of collections) {
+    console.log(`${collection.name}  ${collection.items.length} item(s)`);
+  }
+}
+
 // ---------- argv ----------
 
 function usage(): never {
@@ -458,10 +697,12 @@ function usage(): never {
   toolkit add hook <name>
   toolkit add skill <name> [--link <target>]...
   toolkit add command <name>
+  toolkit add collections <name>
   toolkit update [--force]
   toolkit list hook
   toolkit list skill
-  toolkit list command`,
+  toolkit list command
+  toolkit list collections`,
   );
   process.exit(1);
 }
@@ -511,6 +752,18 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (
+    command === "add" &&
+    (resource === "collection" || resource === "collections")
+  ) {
+    if (!name) {
+      usage();
+    }
+
+    addCollection(name);
+    return;
+  }
+
   if (command === "update") {
     await update(force);
     return;
@@ -521,6 +774,14 @@ async function main(): Promise<void> {
     (resource === "hook" || resource === "skill" || resource === "command")
   ) {
     list(resource as "hook" | "skill" | "command");
+    return;
+  }
+
+  if (
+    command === "list" &&
+    (resource === "collection" || resource === "collections")
+  ) {
+    listCollections();
     return;
   }
 
