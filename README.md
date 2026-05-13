@@ -1,6 +1,6 @@
 # claude-toolkit
 
-CLI for managing [Claude Code](https://claude.com/claude-code) hooks, skills, and commands across projects. Hooks are copied into a project's `.claude/` directory; skills are copied into `.claude-toolkit/skills/` and symlinked into wherever Claude Code expects to find them; commands are copied into `.claude/commands/`.
+CLI for managing [Claude Code](https://claude.com/claude-code) hooks, skills, commands, and collections across projects. Hooks are copied into a project's `.claude/` directory; skills are copied into `.claude-toolkit/skills/` and symlinked into wherever Claude Code expects to find them; commands are copied into `.claude/commands/`; collections install any combination of those resources from a bundled root config.
 
 ## Repo layout
 
@@ -10,6 +10,7 @@ CLI for managing [Claude Code](https://claude.com/claude-code) hooks, skills, an
 │   ├── rpm-start.md
 │   ├── rpm-advance.md
 │   └── ...
+├── config.json                     # bundled collection definitions
 ├── hooks/
 │   ├── auto-approve-safe-commands/
 │   │   ├── hook.mjs                # the hook script itself
@@ -56,6 +57,14 @@ Copies `commands/<name>.md` into `<project>/.claude/commands/<name>.md`. Records
 toolkit add command rpm-start
 ```
 
+### `toolkit add collections <name>`
+
+Reads the root `config.json`, resolves the named collection, and installs each referenced hook, skill, and command using the same underlying logic as the individual `add` commands.
+
+```bash
+toolkit add collections web
+```
+
 ### `toolkit update [--force]`
 
 For every entry in `.claude/toolkit-manifest.json`, compares the current source hash to the installed hash:
@@ -67,6 +76,42 @@ For every entry in `.claude/toolkit-manifest.json`, compares the current source 
 ### `toolkit list hook` / `toolkit list skill` / `toolkit list command`
 
 Lists available hooks, skills, or commands shipped by this repo, with the current source hash.
+
+### `toolkit list collections`
+
+Lists available collection names from the bundled `config.json`, along with the number of items each collection installs.
+
+For compatibility, the CLI accepts both singular and plural forms:
+
+```bash
+toolkit add collection web
+toolkit add collections web
+toolkit list collection
+toolkit list collections
+```
+
+## Collections config
+
+Collections are defined in the repo root `config.json` as an array:
+
+```json
+[
+  {
+    "name": "web",
+    "items": [
+      {
+        "type": "skill",
+        "src": "skills/semantic-html"
+      }
+    ]
+  }
+]
+```
+
+- `name` must be unique.
+- `items` may contain `skill`, `hook`, or `command` entries.
+- `src` must point to a top-level entry under `skills/`, `hooks/`, or `commands/`.
+- Plural `type` values such as `commands` are also accepted for compatibility.
 
 ## Versioning
 
