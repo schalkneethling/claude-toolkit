@@ -487,16 +487,38 @@ function addCollection(name: string): void {
       );
     }
 
+    const itemStats = statSync(item.sourcePath);
+    const actualKind = itemStats.isFile()
+      ? "file"
+      : itemStats.isDirectory()
+        ? "directory"
+        : "other";
+
     if (item.type === "command") {
+      if (!itemStats.isFile()) {
+        throw new Error(
+          `Collection "${item.collection}" expected command source "${item.sourcePath}" to be a file, found ${actualKind}`,
+        );
+      }
       installCommand(item.sourceName, item.sourcePath);
       continue;
     }
 
     if (item.type === "hook") {
+      if (!itemStats.isDirectory()) {
+        throw new Error(
+          `Collection "${item.collection}" expected hook source "${item.sourcePath}" to be a directory, found ${actualKind}`,
+        );
+      }
       installHook(item.sourceName, item.sourcePath);
       continue;
     }
 
+    if (!itemStats.isDirectory()) {
+      throw new Error(
+        `Collection "${item.collection}" expected skill source "${item.sourcePath}" to be a directory, found ${actualKind}`,
+      );
+    }
     installSkill(item.sourceName, item.sourcePath, []);
   }
 }
