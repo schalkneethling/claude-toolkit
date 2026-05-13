@@ -28,3 +28,4 @@ dist-ssr
 .claude-toolkit/
 .codex-smoke-dist/
 .codex-smoke-package/
+.pnpm-store/
