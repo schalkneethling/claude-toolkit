@@ -1,6 +1,6 @@
 {
   "name": "@schalkneethling/toolkit",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "CLI for managing Claude Code hooks and skills across projects.",
   "license": "MIT",
   "bin": {
