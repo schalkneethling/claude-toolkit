@@ -149,15 +149,18 @@ function main(): void {
   try {
     input = JSON.parse(raw) as PermissionRequestInput;
   } catch {
-    process.stderr.write(
-      `[auto-approve-safe-commands] Failed to parse stdin JSON: ${raw}\n`,
-    );
+    process.stderr.write(`[auto-approve-safe-commands] Failed to parse stdin JSON\n`);
     defer();
     return;
   }
 
   // Only handle Bash tool permission requests
   if (input.tool_name !== "Bash") {
+    defer();
+    return;
+  }
+
+  if (typeof input.tool_input !== "object" || input.tool_input === null) {
     defer();
     return;
   }
@@ -173,9 +176,7 @@ function main(): void {
 
   for (const { pattern, label } of SAFE_PATTERNS) {
     if (pattern.test(trimmed)) {
-      process.stderr.write(
-        `[auto-approve-safe-commands] Auto-approved: ${label}\n`,
-      );
+      process.stderr.write(`[auto-approve-safe-commands] Auto-approved: ${label}\n`);
       approve();
       return;
     }

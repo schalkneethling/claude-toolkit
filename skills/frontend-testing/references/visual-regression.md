@@ -5,6 +5,7 @@ Visual regression testing (VRT) catches unintended visual changes by comparing s
 ## When to Use VRT
 
 **Good candidates:**
+
 - Design system components
 - Critical landing pages
 - Complex layouts (grids, dashboards)
@@ -12,6 +13,7 @@ Visual regression testing (VRT) catches unintended visual changes by comparing s
 - Cross-browser visual consistency
 
 **Poor candidates:**
+
 - Pages with frequently changing dynamic content
 - Components with animations
 - Time-dependent displays
@@ -26,7 +28,7 @@ import { test, expect } from "@playwright/test";
 
 test("homepage looks correct", async ({ page }) => {
   await page.goto("/");
-  
+
   await expect(page).toHaveScreenshot();
 });
 ```
@@ -38,7 +40,7 @@ First run creates the baseline. Subsequent runs compare against it.
 ```javascript
 test("hero section renders correctly", async ({ page }) => {
   await page.goto("/");
-  
+
   await expect(page).toHaveScreenshot("homepage-hero.png");
 });
 ```
@@ -50,7 +52,7 @@ More stable than full-page screenshots:
 ```javascript
 test("product card renders correctly", async ({ page }) => {
   await page.goto("/products/123");
-  
+
   const productCard = page.getByTestId("product-card");
   await expect(productCard).toHaveScreenshot("product-card.png");
 });
@@ -61,7 +63,7 @@ test("product card renders correctly", async ({ page }) => {
 ```javascript
 test("full page layout", async ({ page }) => {
   await page.goto("/about");
-  
+
   await expect(page).toHaveScreenshot("about-page-full.png", {
     fullPage: true,
   });
@@ -77,13 +79,13 @@ Visual tests fail due to timing, rendering, or environment differences. Stabiliz
 ```javascript
 test("page renders after loading", async ({ page }) => {
   await page.goto("/");
-  
+
   // Wait for network to be idle
   await page.waitForLoadState("networkidle");
-  
+
   // Wait for web fonts to load
   await page.evaluate(() => document.fonts.ready);
-  
+
   await expect(page).toHaveScreenshot();
 });
 ```
@@ -107,7 +109,7 @@ Or in test:
 ```javascript
 test("static screenshot", async ({ page }) => {
   await page.goto("/");
-  
+
   // Inject CSS to disable animations
   await page.addStyleTag({
     content: `
@@ -117,7 +119,7 @@ test("static screenshot", async ({ page }) => {
       }
     `,
   });
-  
+
   await expect(page).toHaveScreenshot();
 });
 ```
@@ -129,7 +131,7 @@ Hide elements that change between runs:
 ```javascript
 test("page with masked dynamic content", async ({ page }) => {
   await page.goto("/dashboard");
-  
+
   await expect(page).toHaveScreenshot({
     mask: [
       page.locator("[data-testid='current-time']"),
@@ -187,9 +189,9 @@ Allow minor pixel differences to reduce flakiness.
 export default defineConfig({
   expect: {
     toHaveScreenshot: {
-      maxDiffPixels: 100,        // Allow up to 100 different pixels
-      maxDiffPixelRatio: 0.01,   // Or 1% of total pixels
-      threshold: 0.2,           // Color difference threshold (0-1)
+      maxDiffPixels: 100, // Allow up to 100 different pixels
+      maxDiffPixelRatio: 0.01, // Or 1% of total pixels
+      threshold: 0.2, // Color difference threshold (0-1)
     },
   },
 });
@@ -206,14 +208,14 @@ await expect(page).toHaveScreenshot({
 
 ### Threshold Guidelines
 
-| Setting | Value | Use Case |
-|---------|-------|----------|
-| `threshold` | 0.1 | Strict pixel matching |
-| `threshold` | 0.2 | Standard tolerance (default) |
-| `threshold` | 0.3 | Generous for anti-aliasing |
-| `maxDiffPixels` | 50 | Small components |
-| `maxDiffPixels` | 200 | Full pages |
-| `maxDiffPixelRatio` | 0.01 | 1% tolerance |
+| Setting             | Value | Use Case                     |
+| ------------------- | ----- | ---------------------------- |
+| `threshold`         | 0.1   | Strict pixel matching        |
+| `threshold`         | 0.2   | Standard tolerance (default) |
+| `threshold`         | 0.3   | Generous for anti-aliasing   |
+| `maxDiffPixels`     | 50    | Small components             |
+| `maxDiffPixels`     | 200   | Full pages                   |
+| `maxDiffPixelRatio` | 0.01  | 1% tolerance                 |
 
 ## Updating Baselines
 
@@ -290,6 +292,7 @@ export default defineConfig({
 ### OS Differences
 
 Font rendering varies by OS. Options:
+
 - Run visual tests in CI only (consistent environment)
 - Use Docker with consistent fonts
 - Generate baselines in CI, not locally
@@ -301,7 +304,7 @@ Font rendering varies by OS. Options:
 ```yaml
 - name: Run visual tests
   run: npx playwright test --project=chromium
-  
+
 - name: Upload diff artifacts on failure
   if: failure()
   uses: actions/upload-artifact@v7
@@ -317,7 +320,7 @@ For consistent baselines, generate in CI:
 ```yaml
 - name: Update baselines
   run: npx playwright test --update-snapshots
-  
+
 - name: Commit baselines
   run: |
     git config user.name "CI Bot"
@@ -360,6 +363,7 @@ npx playwright show-report
 ```
 
 Shows:
+
 - Expected (baseline) image
 - Actual (current) image
 - Diff highlighting changed pixels
@@ -398,12 +402,14 @@ This seems appealing for "cleaner" snapshot names, but it breaks visual testing.
 > "Different snapshots are needed for different browsers and platforms due to variations in rendering and fonts."
 
 **Why it fails:**
+
 - Font rendering differs between macOS, Windows, and Linux
 - Anti-aliasing algorithms vary by OS and browser
 - Subpixel rendering produces different results
 - You'll get constant false positives or false negatives
 
 **Keep the default naming:**
+
 ```
 button-chromium-darwin.png
 button-chromium-linux.png

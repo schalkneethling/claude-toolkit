@@ -31,14 +31,14 @@ await expect(page.getByRole("main")).toMatchAriaSnapshot(`
 
 ### Benefits Over Visual Snapshots
 
-| Aspect | ARIA Snapshot | Visual Screenshot |
-|--------|---------------|-------------------|
-| Styling changes | Unaffected | Fails |
-| Font rendering | Unaffected | Varies by OS |
-| Cross-browser | Consistent | Different per browser |
-| What it validates | Semantic structure | Pixel appearance |
-| Accessibility | Validates a11y tree | No a11y validation |
-| File size | Tiny (YAML text) | Large (PNG images) |
+| Aspect            | ARIA Snapshot       | Visual Screenshot     |
+| ----------------- | ------------------- | --------------------- |
+| Styling changes   | Unaffected          | Fails                 |
+| Font rendering    | Unaffected          | Varies by OS          |
+| Cross-browser     | Consistent          | Different per browser |
+| What it validates | Semantic structure  | Pixel appearance      |
+| Accessibility     | Validates a11y tree | No a11y validation    |
+| File size         | Tiny (YAML text)    | Large (PNG images)    |
 
 ### What It Catches
 
@@ -122,7 +122,7 @@ State and properties in square brackets:
 
 # Link URLs (newer feature)
 - link "Documentation":
-  - /url: "https://docs.example.com"
+    - /url: "https://docs.example.com"
 ```
 
 ### Nesting
@@ -131,18 +131,18 @@ Indentation shows hierarchy:
 
 ```yaml
 - navigation:
-  - list:
-    - listitem:
-      - link "Home"
-    - listitem:
-      - link "Products"
-    - listitem:
-      - link "About"
+    - list:
+        - listitem:
+            - link "Home"
+        - listitem:
+            - link "Products"
+        - listitem:
+            - link "About"
 - main:
-  - heading "Products" [level=1]
-  - list:
-    - listitem "Product A"
-    - listitem "Product B"
+    - heading "Products" [level=1]
+    - list:
+        - listitem "Product A"
+        - listitem "Product B"
 ```
 
 ## Basic Usage
@@ -154,7 +154,7 @@ import { test, expect } from "@playwright/test";
 
 test("login form structure", async ({ page }) => {
   await page.goto("/login");
-  
+
   await expect(page.getByRole("main")).toMatchAriaSnapshot(`
     - heading "Sign In" [level=1]
     - textbox "Email"
@@ -173,7 +173,7 @@ Store snapshots in separate YAML files:
 ```javascript
 test("dashboard structure", async ({ page }) => {
   await page.goto("/dashboard");
-  
+
   await expect(page.getByRole("main")).toMatchAriaSnapshot({
     name: "dashboard-main.aria.yml",
   });
@@ -280,6 +280,7 @@ npx playwright codegen example.com
 ```
 
 In the recorder:
+
 1. Click "Assert snapshot" action
 2. Select the element
 3. ARIA snapshot is generated
@@ -289,7 +290,7 @@ In the recorder:
 ```javascript
 test("generate snapshot for review", async ({ page }) => {
   await page.goto("/products");
-  
+
   // Get the YAML representation
   const snapshot = await page.getByRole("main").ariaSnapshot();
   console.log(snapshot);
@@ -320,16 +321,16 @@ Test different states of the same component:
 test.describe("Accordion", () => {
   test("collapsed state", async ({ page }) => {
     await page.goto("/accordion");
-    
+
     await expect(page.getByRole("region", { name: /details/i })).toMatchAriaSnapshot(`
       - button "Details" [expanded=false]
     `);
   });
-  
+
   test("expanded state", async ({ page }) => {
     await page.goto("/accordion");
     await page.getByRole("button", { name: /details/i }).click();
-    
+
     await expect(page.getByRole("region", { name: /details/i })).toMatchAriaSnapshot(`
       - button "Details" [expanded=true]
       - text "Additional information here"
@@ -344,7 +345,7 @@ test.describe("Accordion", () => {
 test("shows validation errors", async ({ page }) => {
   await page.goto("/signup");
   await page.getByRole("button", { name: /submit/i }).click();
-  
+
   await expect(page.getByRole("form")).toMatchAriaSnapshot(`
     - textbox "Email"
     - text "Email is required"
@@ -360,7 +361,7 @@ test("shows validation errors", async ({ page }) => {
 ```javascript
 test("cart shows item count", async ({ page }) => {
   await page.goto("/cart");
-  
+
   await expect(page.getByRole("banner")).toMatchAriaSnapshot(`
     - link "Home"
     - link /\\d+ items?/ 
@@ -373,15 +374,15 @@ test("cart shows item count", async ({ page }) => {
 ```javascript
 test("dialog opens and closes", async ({ page }) => {
   await page.goto("/");
-  
+
   // Before: no dialog
   await expect(page.getByRole("main")).toMatchAriaSnapshot(`
     - button "Open Settings"
   `);
-  
+
   // Open dialog
   await page.getByRole("button", { name: /settings/i }).click();
-  
+
   // After: dialog visible
   await expect(page.getByRole("dialog")).toMatchAriaSnapshot(`
     - dialog "Settings":
@@ -401,7 +402,7 @@ ARIA snapshots validate structure. Combine with other assertions for complete co
 ```javascript
 test("product page", async ({ page }) => {
   await page.goto("/products/123");
-  
+
   // Structure validation
   await expect(page.getByRole("main")).toMatchAriaSnapshot(`
     - img "Product photo"
@@ -409,11 +410,11 @@ test("product page", async ({ page }) => {
     - text "$49.99"
     - button "Add to cart"
   `);
-  
+
   // Functional validation
   await page.getByRole("button", { name: /add to cart/i }).click();
   await expect(page.getByRole("alert")).toContainText("Added to cart");
-  
+
   // Accessibility validation (axe-core)
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);

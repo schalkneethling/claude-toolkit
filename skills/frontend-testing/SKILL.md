@@ -16,7 +16,7 @@ This principle guides testing decisions, but isn't the whole picture:
 - **Acceptance criteria tests** verify the system does what users/stakeholders need. These should be stable across refactors.
 - **Implementation tests** verify the pieces are robust — edge cases, error handling, complex logic. These may change when you refactor.
 
-Both have value. The anti-pattern to avoid is tests that *only* mirror implementation without validating meaningful behavior.
+Both have value. The anti-pattern to avoid is tests that _only_ mirror implementation without validating meaningful behavior.
 
 ## When to Load References
 
@@ -36,6 +36,7 @@ Load reference files based on test type:
 Before writing any test, identify what the code should do from the user's perspective.
 
 Ask for or extract criteria from:
+
 - Ticket description or user story
 - Figma annotations
 - Functional requirements
@@ -48,11 +49,13 @@ Document criteria as a checklist. These become your first tests.
 ### Step 2: Map Criteria to Test Cases
 
 For each criterion, identify:
+
 - **Happy path**: Normal expected behavior
 - **Edge cases**: Boundary conditions
 - **Error cases**: Invalid inputs, failures
 
 Example mapping:
+
 ```text
 Criterion: "User can filter products by category"
 ├─ Happy path: Select category, products filter correctly
@@ -85,14 +88,14 @@ The distinction: acceptance tests should rarely change on refactor; implementati
 
 ### Step 4: Choose Test Type
 
-| Scenario | Test Type | Tool |
-|----------|-----------|------|
-| Pure logic (no DOM) | Unit test | Vitest |
-| Component behavior | Unit test with DOM | Vitest + Testing Library |
-| User flows, real browser | E2E test | Playwright |
-| Semantic structure validation | ARIA snapshot | Playwright `toMatchAriaSnapshot` |
-| Visual appearance | VRT | Playwright screenshots |
-| Accessibility compliance | A11y test | Playwright + axe-core |
+| Scenario                      | Test Type          | Tool                             |
+| ----------------------------- | ------------------ | -------------------------------- |
+| Pure logic (no DOM)           | Unit test          | Vitest                           |
+| Component behavior            | Unit test with DOM | Vitest + Testing Library         |
+| User flows, real browser      | E2E test           | Playwright                       |
+| Semantic structure validation | ARIA snapshot      | Playwright `toMatchAriaSnapshot` |
+| Visual appearance             | VRT                | Playwright screenshots           |
+| Accessibility compliance      | A11y test          | Playwright + axe-core            |
 
 **ARIA snapshots** are particularly valuable for E2E tests. A single snapshot can replace multiple individual assertions while validating the accessibility tree structure.
 
@@ -114,10 +117,10 @@ describe("calculateDiscount", () => {
     it("applies 20% discount to order total", () => {
       // Arrange - Set up test data matching criterion
       const order = { total: 100, membership: "premium" };
-      
+
       // Act - Call the function
       const result = calculateDiscount(order);
-      
+
       // Assert - Verify expected outcome from requirements
       expect(result).toBe(80);
     });
@@ -136,24 +139,14 @@ describe("LoginForm", () => {
     it("displays error message to user", async () => {
       const user = userEvent.setup();
       render(<LoginForm />);
-      
+
       // Interact using accessible queries
-      await user.type(
-        screen.getByLabelText(/email/i),
-        "invalid@test.com"
-      );
-      await user.type(
-        screen.getByLabelText(/password/i),
-        "wrong"
-      );
-      await user.click(
-        screen.getByRole("button", { name: /sign in/i })
-      );
-      
+      await user.type(screen.getByLabelText(/email/i), "invalid@test.com");
+      await user.type(screen.getByLabelText(/password/i), "wrong");
+      await user.click(screen.getByRole("button", { name: /sign in/i }));
+
       // Assert on user-visible outcome
-      expect(
-        await screen.findByRole("alert")
-      ).toHaveTextContent(/invalid credentials/i);
+      expect(await screen.findByRole("alert")).toHaveTextContent(/invalid credentials/i);
     });
   });
 });
@@ -168,10 +161,10 @@ test.describe("Product Catalog", () => {
   test.describe("filtering by category", () => {
     test("shows only matching products", async ({ page }) => {
       await page.goto("/products");
-      
+
       // Use semantic locators
       await page.getByRole("combobox", { name: /category/i }).selectOption("Electronics");
-      
+
       // Assert count, then spot-check first/last
       const products = page.getByRole("article");
       await expect(products).toHaveCount(5);
@@ -188,14 +181,12 @@ When you need to verify all items, use `Promise.all` for parallel assertions:
 test("all products match filter", async ({ page }) => {
   await page.goto("/products");
   await page.getByRole("combobox", { name: /category/i }).selectOption("Electronics");
-  
+
   const products = await page.getByRole("article").all();
-  
+
   // Parallel assertions — faster than sequential await in a loop
   await Promise.all(
-    products.map(product =>
-      expect(product.getByText(/electronics/i)).toBeVisible()
-    )
+    products.map((product) => expect(product.getByText(/electronics/i)).toBeVisible()),
   );
 });
 ```
@@ -208,7 +199,7 @@ ARIA snapshots consolidate multiple assertions into one, validating semantic str
 test.describe("Login Page", () => {
   test("has correct form structure", async ({ page }) => {
     await page.goto("/login");
-    
+
     // One snapshot replaces 5+ individual assertions
     await expect(page.getByRole("main")).toMatchAriaSnapshot(`
       - heading "Sign In" [level=1]
@@ -218,11 +209,11 @@ test.describe("Login Page", () => {
       - link "Forgot password?"
     `);
   });
-  
+
   test("shows validation errors on empty submit", async ({ page }) => {
     await page.goto("/login");
     await page.getByRole("button", { name: /sign in/i }).click();
-    
+
     await expect(page.getByRole("form")).toMatchAriaSnapshot(`
       - textbox "Email"
       - text "Email is required"
@@ -279,7 +270,7 @@ it("returns validation errors for malformed email", () => {
 });
 ```
 
-The key distinction: implementation tests should verify *meaningful* behavior of units, not just that code paths execute.
+The key distinction: implementation tests should verify _meaningful_ behavior of units, not just that code paths execute.
 
 ### Circular Validation
 
@@ -324,11 +315,13 @@ page.getByRole("button", { name: /submit order/i });
 When a test fails, the investigation depends on the test type:
 
 **Acceptance test fails:**
+
 1. Check the code under test first — likely a real bug
 2. Verify the test still matches current requirements — requirements may have changed
 3. Only update the test after confirming the new behavior is correct
 
 **Implementation test fails:**
+
 1. If you're refactoring, the test may legitimately need updating
 2. If you're not refactoring, check the code — likely a bug
 3. Consider whether the test is too tightly coupled to implementation

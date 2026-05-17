@@ -209,9 +209,7 @@ When in doubt: if the content serves the primary purpose of the page, it belongs
 ```html
 <!-- Correct: pull quote from the article's own content -->
 <aside aria-label="Pull quote">
-  <p>
-    "The biggest gains came not from new features, but from removing old ones."
-  </p>
+  <p>"The biggest gains came not from new features, but from removing old ones."</p>
 </aside>
 
 <!-- Use blockquote for genuine external quotations -->
@@ -462,9 +460,7 @@ HTML's `required` attribute communicates required state to assistive technology,
 ```html
 <!-- Pattern: asterisk with legend explaining it -->
 <fieldset>
-  <legend>
-    Contact details <span aria-hidden="true">*</span> required fields
-  </legend>
+  <legend>Contact details <span aria-hidden="true">*</span> required fields</legend>
 
   <label for="name">Full name <span aria-hidden="true">*</span></label>
   <input type="text" id="name" required />
@@ -486,12 +482,7 @@ When inputs have format hints or helper text, associate them with the input via 
 Multiple associations are allowed—comma-separated IDs work for both hint and error:
 
 ```html
-<input
-  type="email"
-  id="email"
-  aria-invalid="true"
-  aria-describedby="email-hint email-error"
-/>
+<input type="email" id="email" aria-invalid="true" aria-describedby="email-hint email-error" />
 ```
 
 ### Error Messages
@@ -505,15 +496,8 @@ Current best practice (due to browser support gaps with `aria-errormessage`):
 
 ```html
 <label for="email">Email</label>
-<input
-  type="email"
-  id="email"
-  aria-invalid="true"
-  aria-describedby="email-error"
-/>
-<p id="email-error" class="error">
-  Enter a valid email address, like name@example.com
-</p>
+<input type="email" id="email" aria-invalid="true" aria-describedby="email-error" />
+<p id="email-error" class="error">Enter a valid email address, like name@example.com</p>
 ```
 
 ## Tables

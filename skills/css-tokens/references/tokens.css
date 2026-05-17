@@ -3,11 +3,11 @@
    * Typography - Font Families
    * ======================================== */
   --font-family-base:
-    inter, "Source Sans 3", "IBM Plex Sans", -apple-system, blinkmacsystemfont,
-    "Segoe UI", roboto, helvetica, arial, sans-serif;
+    inter, "Source Sans 3", "IBM Plex Sans", -apple-system, blinkmacsystemfont, "Segoe UI", roboto,
+    helvetica, arial, sans-serif;
   --font-family-mono:
-    ui-monospace, "SF Mono", "Cascadia Code", "Segoe UI Mono",
-    "Liberation Mono", menlo, monaco, consolas, monospace;
+    ui-monospace, "SF Mono", "Cascadia Code", "Segoe UI Mono", "Liberation Mono", menlo, monaco,
+    consolas, monospace;
 
   /* ========================================
    * Typography - Font Weights
@@ -85,9 +85,7 @@
   /* Text */
   --color-text: oklch(25% 0.02 250deg); /* Dark slate */
   --color-text-muted: oklch(50% 0.015 250deg); /* Medium gray */
-  --color-text-inverted: oklch(
-    98% 0.005 250deg
-  ); /* Light for dark backgrounds */
+  --color-text-inverted: oklch(98% 0.005 250deg); /* Light for dark backgrounds */
 
   /* Logo Colors - derived from brand */
   --color-logo-maker: oklch(40% 0.025 220deg); /* Dark slate-blue */
@@ -129,9 +127,7 @@
     /* Text */
     --color-text: oklch(92% 0.01 250deg); /* Light gray */
     --color-text-muted: oklch(65% 0.01 250deg); /* Muted gray */
-    --color-text-inverted: oklch(
-      18% 0.015 250deg
-    ); /* Dark for light backgrounds */
+    --color-text-inverted: oklch(18% 0.015 250deg); /* Dark for light backgrounds */
 
     /* Logo Colors - brighter for dark mode */
     --color-logo-maker: oklch(75% 0.02 220deg); /* Lighter slate */

@@ -8,21 +8,21 @@ Generate unique per-session tokens and validate on state-changing requests:
 
 ```javascript
 // Server-side token generation (Node.js)
-const crypto = require('crypto');
+const crypto = require("crypto");
 
 function generateCSRFToken(session) {
-  const token = crypto.randomBytes(32).toString('hex');
+  const token = crypto.randomBytes(32).toString("hex");
   session.csrfToken = token;
   return token;
 }
 
 // Middleware validation
 function validateCSRF(req, res, next) {
-  const token = req.headers['x-csrf-token'] || req.body._csrf;
+  const token = req.headers["x-csrf-token"] || req.body._csrf;
   const sessionToken = req.session.csrfToken;
 
-  if (typeof token !== 'string' || typeof sessionToken !== 'string') {
-    return res.status(403).json({ error: 'Invalid CSRF token' });
+  if (typeof token !== "string" || typeof sessionToken !== "string") {
+    return res.status(403).json({ error: "Invalid CSRF token" });
   }
 
   const tokenBuffer = Buffer.from(token);
@@ -32,7 +32,7 @@ function validateCSRF(req, res, next) {
     tokenBuffer.length !== sessionTokenBuffer.length ||
     !crypto.timingSafeEqual(tokenBuffer, sessionTokenBuffer)
   ) {
-    return res.status(403).json({ error: 'Invalid CSRF token' });
+    return res.status(403).json({ error: "Invalid CSRF token" });
   }
   next();
 }
@@ -42,24 +42,24 @@ function validateCSRF(req, res, next) {
 
 ```javascript
 // Set CSRF cookie
-res.cookie('csrf_token', token, {
-  httpOnly: false,  // Must be readable by JavaScript
+res.cookie("csrf_token", token, {
+  httpOnly: false, // Must be readable by JavaScript
   secure: true,
-  sameSite: 'Strict'
+  sameSite: "Strict",
 });
 
 // Client sends token in header
-fetch('/api/action', {
-  method: 'POST',
+fetch("/api/action", {
+  method: "POST",
   headers: {
-    'X-CSRF-Token': getCookie('csrf_token')
-  }
+    "X-CSRF-Token": getCookie("csrf_token"),
+  },
 });
 
 // Server validates cookie matches header
 function validateDoubleSubmit(req) {
   const cookieToken = req.cookies.csrf_token;
-  const headerToken = req.headers['x-csrf-token'];
+  const headerToken = req.headers["x-csrf-token"];
   return cookieToken && cookieToken === headerToken;
 }
 ```
@@ -68,43 +68,43 @@ function validateDoubleSubmit(req) {
 
 ```javascript
 // Strict - never sent cross-site
-res.cookie('session', value, { sameSite: 'Strict', secure: true, httpOnly: true });
+res.cookie("session", value, { sameSite: "Strict", secure: true, httpOnly: true });
 
 // Lax - sent for top-level GET navigations (default in modern browsers)
-res.cookie('session', value, { sameSite: 'Lax', secure: true, httpOnly: true });
+res.cookie("session", value, { sameSite: "Lax", secure: true, httpOnly: true });
 
 // None - requires Secure flag, sent cross-site
-res.cookie('session', value, { sameSite: 'None', secure: true, httpOnly: true });
+res.cookie("session", value, { sameSite: "None", secure: true, httpOnly: true });
 ```
 
 **Recommendation**: Use `SameSite=Strict` for session cookies when possible, `Lax` as minimum.
 
 ## Fetch Metadata Headers
 
-Validate request origin using Sec-Fetch-* headers:
+Validate request origin using Sec-Fetch-\* headers:
 
 ```javascript
 function validateFetchMetadata(req, res, next) {
-  const site = req.headers['sec-fetch-site'];
-  const mode = req.headers['sec-fetch-mode'];
-  const dest = req.headers['sec-fetch-dest'];
+  const site = req.headers["sec-fetch-site"];
+  const mode = req.headers["sec-fetch-mode"];
+  const dest = req.headers["sec-fetch-dest"];
   const method = req.method;
 
   // Allow same-origin requests
-  if (site === 'same-origin') return next();
+  if (site === "same-origin") return next();
 
   // Allow user-initiated browser navigations
-  if (site === 'none') return next();
+  if (site === "none") return next();
 
   // Allow same-site top-level navigations and safe methods
   if (
-    site === 'same-site' &&
-    (mode === 'navigate' || ['GET', 'HEAD', 'OPTIONS'].includes(method))
+    site === "same-site" &&
+    (mode === "navigate" || ["GET", "HEAD", "OPTIONS"].includes(method))
   ) {
     return next();
   }
 
-  return res.status(403).json({ error: 'Fetch metadata validation failed' });
+  return res.status(403).json({ error: "Fetch metadata validation failed" });
 }
 ```
 
@@ -113,20 +113,24 @@ function validateFetchMetadata(req, res, next) {
 ### Express.js with Signed Double-Submit Tokens
 
 ```javascript
-const crypto = require('crypto');
+const crypto = require("crypto");
 
-const CSRF_COOKIE_NAME = 'csrf_token';
-const CSRF_SECRET = Buffer.from(process.env.CSRF_SECRET, 'hex');
+const CSRF_COOKIE_NAME = "csrf_token";
+if (!/^[a-f0-9]{64,}$/i.test(process.env.CSRF_SECRET || "")) {
+  throw new Error("CSRF_SECRET must be a hex-encoded secret with at least 32 bytes of entropy");
+}
+
+const CSRF_SECRET = Buffer.from(process.env.CSRF_SECRET, "hex");
 
 function signToken(sessionId, nonce) {
   return crypto
-    .createHmac('sha256', CSRF_SECRET)
+    .createHmac("sha256", CSRF_SECRET)
     .update(`${sessionId}:${nonce}`)
-    .digest('base64url');
+    .digest("base64url");
 }
 
 function constantTimeEqual(value, expected) {
-  if (typeof value !== 'string' || typeof expected !== 'string') return false;
+  if (typeof value !== "string" || typeof expected !== "string") return false;
 
   const valueBuffer = Buffer.from(value);
   const expectedBuffer = Buffer.from(expected);
@@ -138,7 +142,7 @@ function constantTimeEqual(value, expected) {
 }
 
 function generateToken(req) {
-  const nonce = crypto.randomBytes(32).toString('base64url');
+  const nonce = crypto.randomBytes(32).toString("base64url");
   const signature = signToken(req.session.id, nonce);
   return `${nonce}.${signature}`;
 }
@@ -149,7 +153,7 @@ function sendToken(req, res, next) {
   res.cookie(CSRF_COOKIE_NAME, token, {
     httpOnly: true,
     secure: true,
-    sameSite: 'Strict'
+    sameSite: "Strict",
   });
 
   res.locals.csrfToken = token;
@@ -157,30 +161,30 @@ function sendToken(req, res, next) {
 }
 
 function verifyToken(req, res, next) {
-  const token = req.headers['x-csrf-token'] || req.body._csrf;
+  const token = req.headers["x-csrf-token"] || req.body._csrf;
   const cookieToken = req.cookies[CSRF_COOKIE_NAME];
 
   if (!constantTimeEqual(token, cookieToken)) {
-    return res.status(403).json({ error: 'Invalid CSRF token' });
+    return res.status(403).json({ error: "Invalid CSRF token" });
   }
 
-  const [nonce, signature, extra] = cookieToken.split('.');
+  const [nonce, signature, extra] = cookieToken.split(".");
   if (extra || !nonce || !signature) {
-    return res.status(403).json({ error: 'Invalid CSRF token' });
+    return res.status(403).json({ error: "Invalid CSRF token" });
   }
 
   if (!constantTimeEqual(signature, signToken(req.session.id, nonce))) {
-    return res.status(403).json({ error: 'Invalid CSRF token' });
+    return res.status(403).json({ error: "Invalid CSRF token" });
   }
 
   next();
 }
 
-app.get('/form', sendToken, (req, res) => {
-  res.render('form', { csrfToken: res.locals.csrfToken });
+app.get("/form", sendToken, (req, res) => {
+  res.render("form", { csrfToken: res.locals.csrfToken });
 });
 
-app.post('/submit', verifyToken, (req, res) => {
+app.post("/submit", verifyToken, (req, res) => {
   res.json({ ok: true });
 });
 ```
@@ -188,16 +192,16 @@ app.post('/submit', verifyToken, (req, res) => {
 Example tests for token issuance and verification:
 
 ```javascript
-const assert = require('node:assert/strict');
-const test = require('node:test');
+const assert = require("node:assert/strict");
+const test = require("node:test");
 
-test('sendToken issues a cookie and exposes a form token', () => {
-  const req = { session: { id: 'session-123' } };
+test("sendToken issues a cookie and exposes a form token", () => {
+  const req = { session: { id: "session-123" } };
   const res = {
     locals: {},
     cookie(name, value, options) {
       this.cookieArgs = { name, value, options };
-    }
+    },
   };
 
   sendToken(req, res, () => {});
@@ -205,36 +209,36 @@ test('sendToken issues a cookie and exposes a form token', () => {
   assert.equal(res.cookieArgs.name, CSRF_COOKIE_NAME);
   assert.equal(res.locals.csrfToken, res.cookieArgs.value);
   assert.equal(res.cookieArgs.options.httpOnly, true);
-  assert.equal(res.cookieArgs.options.sameSite, 'Strict');
+  assert.equal(res.cookieArgs.options.sameSite, "Strict");
 });
 
-test('verifyToken accepts a matching signed token', () => {
-  const req = { session: { id: 'session-123' } };
+test("verifyToken accepts a matching signed token", () => {
+  const req = { session: { id: "session-123" } };
   const token = generateToken(req);
   let called = false;
 
   verifyToken(
     {
       ...req,
-      headers: { 'x-csrf-token': token },
+      headers: { "x-csrf-token": token },
       body: {},
-      cookies: { [CSRF_COOKIE_NAME]: token }
+      cookies: { [CSRF_COOKIE_NAME]: token },
     },
     {},
     () => {
       called = true;
-    }
+    },
   );
 
   assert.equal(called, true);
 });
 
-test('verifyToken rejects mismatched or tampered tokens', () => {
+test("verifyToken rejects mismatched or tampered tokens", () => {
   const req = {
-    session: { id: 'session-123' },
-    headers: { 'x-csrf-token': 'tampered.token' },
+    session: { id: "session-123" },
+    headers: { "x-csrf-token": "tampered.token" },
     body: {},
-    cookies: { [CSRF_COOKIE_NAME]: generateToken({ session: { id: 'session-123' } }) }
+    cookies: { [CSRF_COOKIE_NAME]: generateToken({ session: { id: "session-123" } }) },
   };
   const res = {
     status(code) {
@@ -243,13 +247,13 @@ test('verifyToken rejects mismatched or tampered tokens', () => {
     },
     json(body) {
       this.body = body;
-    }
+    },
   };
 
   verifyToken(req, res, () => {});
 
   assert.equal(res.statusCode, 403);
-  assert.deepEqual(res.body, { error: 'Invalid CSRF token' });
+  assert.deepEqual(res.body, { error: "Invalid CSRF token" });
 });
 ```
 
@@ -259,13 +263,13 @@ test('verifyToken rejects mismatched or tampered tokens', () => {
 function Form({ csrfToken }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await fetch('/api/submit', {
-      method: 'POST',
+    await fetch("/api/submit", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': csrfToken
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
       },
-      body: JSON.stringify(formData)
+      body: JSON.stringify(formData),
     });
   };
 
@@ -293,10 +297,10 @@ Protect against CSRF in single-page applications:
 
 ```javascript
 // Set up axios defaults
-import axios from 'axios';
+import axios from "axios";
 
-axios.defaults.xsrfCookieName = 'csrf_token';
-axios.defaults.xsrfHeaderName = 'X-CSRF-Token';
+axios.defaults.xsrfCookieName = "csrf_token";
+axios.defaults.xsrfHeaderName = "X-CSRF-Token";
 axios.defaults.withCredentials = true;
 
 // Or with fetch
@@ -305,11 +309,11 @@ async function secureFetch(url, options = {}) {
 
   return fetch(url, {
     ...options,
-    credentials: 'same-origin',
+    credentials: "same-origin",
     headers: {
       ...options.headers,
-      'X-CSRF-Token': csrfToken
-    }
+      "X-CSRF-Token": csrfToken,
+    },
   });
 }
 ```

@@ -12,15 +12,15 @@ Query the accessibility tree. If this fails, the UI likely has accessibility iss
 
 ```javascript
 // Playwright
-page.getByRole("button", { name: /submit/i })
-page.getByRole("textbox", { name: /email/i })
-page.getByRole("heading", { level: 1 })
-page.getByRole("navigation")
-page.getByRole("listitem")
+page.getByRole("button", { name: /submit/i });
+page.getByRole("textbox", { name: /email/i });
+page.getByRole("heading", { level: 1 });
+page.getByRole("navigation");
+page.getByRole("listitem");
 
 // Testing Library
-screen.getByRole("button", { name: /submit/i })
-screen.getByRole("checkbox", { checked: true })
+screen.getByRole("button", { name: /submit/i });
+screen.getByRole("checkbox", { checked: true });
 ```
 
 **Why first**: Users and assistive technologies perceive the page through roles. Testing with roles validates both functionality and accessibility.
@@ -29,12 +29,13 @@ screen.getByRole("checkbox", { checked: true })
 
 ```javascript
 // Multiple buttons? Filter by name
-page.getByRole("button", { name: /save/i })      // Save button
-page.getByRole("button", { name: /cancel/i })    // Cancel button
-page.getByRole("button", { name: /delete/i })    // Delete button
+page.getByRole("button", { name: /save/i }); // Save button
+page.getByRole("button", { name: /cancel/i }); // Cancel button
+page.getByRole("button", { name: /delete/i }); // Delete button
 ```
 
 **Common roles**:
+
 - `button`, `link`, `textbox`, `checkbox`, `radio`
 - `combobox` (select), `listbox`, `option`
 - `heading`, `navigation`, `main`, `article`
@@ -48,12 +49,12 @@ How users find form fields. Validates label-input association.
 
 ```javascript
 // Playwright
-page.getByLabel("Email address")
-page.getByLabel(/password/i)
+page.getByLabel("Email address");
+page.getByLabel(/password/i);
 
 // Testing Library
-screen.getByLabelText("Email address")
-screen.getByLabelText(/confirm password/i)
+screen.getByLabelText("Email address");
+screen.getByLabelText(/confirm password/i);
 ```
 
 **Why second**: Form users navigate by labels. Tests using labels fail if labels are missing or improperly associated—catching real accessibility bugs.
@@ -63,8 +64,8 @@ screen.getByLabelText(/confirm password/i)
 Use only when labels aren't available. Placeholder is not a label substitute.
 
 ```javascript
-page.getByPlaceholder("Search products...")
-screen.getByPlaceholderText("Enter your query")
+page.getByPlaceholder("Search products...");
+screen.getByPlaceholderText("Enter your query");
 ```
 
 **Why third**: Better than test IDs, but UI should have proper labels.
@@ -75,12 +76,12 @@ For elements identified by their content.
 
 ```javascript
 // Playwright
-page.getByText("Welcome back, Sarah")
-page.getByText(/order confirmed/i)
+page.getByText("Welcome back, Sarah");
+page.getByText(/order confirmed/i);
 
 // Testing Library
-screen.getByText("No results found")
-screen.getByText(/loading/i)
+screen.getByText("No results found");
+screen.getByText(/loading/i);
 ```
 
 **Why fourth**: Useful for assertions on content, but doesn't verify semantic structure.
@@ -90,8 +91,8 @@ screen.getByText(/loading/i)
 For images with meaningful alt text.
 
 ```javascript
-page.getByAltText("Company logo")
-screen.getByAltText(/product photo/i)
+page.getByAltText("Company logo");
+screen.getByAltText(/product photo/i);
 ```
 
 ### 6. Title Attribute
@@ -99,8 +100,8 @@ screen.getByAltText(/product photo/i)
 Rarely used. Most elements shouldn't rely on title for identification.
 
 ```javascript
-page.getByTitle("Close dialog")
-screen.getByTitle(/help/i)
+page.getByTitle("Close dialog");
+screen.getByTitle(/help/i);
 ```
 
 ### 7. Test IDs (Last Resort)
@@ -109,18 +110,20 @@ Escape hatch when semantic queries fail. Provides no accessibility verification.
 
 ```javascript
 // Playwright
-page.getByTestId("pricing-calculator")
+page.getByTestId("pricing-calculator");
 
 // Testing Library
-screen.getByTestId("data-grid")
+screen.getByTestId("data-grid");
 ```
 
 **When appropriate**:
+
 - Complex dynamic components (data grids, charts)
 - Elements with no stable accessible name
 - Third-party components you can't modify
 
 **When to avoid**:
+
 - Any element that has text, label, or semantic role
 - As a default choice to "make tests easier"
 
@@ -163,12 +166,8 @@ When strict matching fails:
 ```javascript
 // Get all, then filter
 const buttons = await page.getByRole("button").all();
-const buttonTexts = await Promise.all(
-  buttons.map(button => button.textContent())
-);
-const deleteButtons = buttons.filter((button, index) =>
-  buttonTexts[index]?.includes("Delete")
-);
+const buttonTexts = await Promise.all(buttons.map((button) => button.textContent()));
+const deleteButtons = buttons.filter((button, index) => buttonTexts[index]?.includes("Delete"));
 
 // Or be more specific with the query
 page.getByRole("button", { name: "Delete", exact: true });
@@ -178,11 +177,11 @@ page.getByRole("button", { name: "Delete", exact: true });
 
 ### get vs query vs find
 
-| Variant | No match | Multiple matches | Async |
-|---------|----------|------------------|-------|
-| `getBy` | Throws | Throws | No |
-| `queryBy` | Returns null | Throws | No |
-| `findBy` | Throws | Throws | Yes (waits) |
+| Variant   | No match     | Multiple matches | Async       |
+| --------- | ------------ | ---------------- | ----------- |
+| `getBy`   | Throws       | Throws           | No          |
+| `queryBy` | Returns null | Throws           | No          |
+| `findBy`  | Throws       | Throws           | Yes (waits) |
 
 ```javascript
 // Element should exist now
@@ -262,9 +261,7 @@ page.getByRole("alert");
 
 ```javascript
 // Log all accessible elements
-await page.getByRole("button").evaluateAll(buttons => 
-  buttons.map(b => b.textContent)
-);
+await page.getByRole("button").evaluateAll((buttons) => buttons.map((b) => b.textContent));
 
 // Use Playwright Inspector
 // npx playwright test --debug

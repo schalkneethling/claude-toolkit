@@ -5,6 +5,7 @@ Automated accessibility testing catches common issues early. Combine with manual
 ## Limitations of Automated Testing
 
 Automated tools detect approximately 30-40% of accessibility issues. They catch:
+
 - Missing labels and alt text
 - Color contrast violations
 - Invalid ARIA attributes
@@ -12,6 +13,7 @@ Automated tools detect approximately 30-40% of accessibility issues. They catch:
 - Missing landmark regions
 
 They cannot catch:
+
 - Logical reading order
 - Meaningful link text in context
 - Appropriate focus management
@@ -37,9 +39,9 @@ import AxeBuilder from "@axe-core/playwright";
 test.describe("Homepage", () => {
   test("has no automatically detectable accessibility violations", async ({ page }) => {
     await page.goto("/");
-    
+
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
-    
+
     expect(accessibilityScanResults.violations).toEqual([]);
   });
 });
@@ -52,15 +54,15 @@ Always ensure the page is in the expected state before scanning:
 ```javascript
 test("navigation menu is accessible when open", async ({ page }) => {
   await page.goto("/");
-  
+
   // Open the menu
   await page.getByRole("button", { name: /menu/i }).click();
-  
+
   // Wait for menu to be visible before scanning
   await page.getByRole("navigation", { name: /main/i }).waitFor();
-  
+
   const results = await new AxeBuilder({ page }).analyze();
-  
+
   expect(results.violations).toEqual([]);
 });
 ```
@@ -72,11 +74,11 @@ Focus on components you're testing:
 ```javascript
 test("checkout form is accessible", async ({ page }) => {
   await page.goto("/checkout");
-  
+
   const results = await new AxeBuilder({ page })
-    .include("#checkout-form")  // Only scan this region
+    .include("#checkout-form") // Only scan this region
     .analyze();
-  
+
   expect(results.violations).toEqual([]);
 });
 ```
@@ -87,8 +89,8 @@ Temporarily exclude elements while fixing issues:
 
 ```javascript
 const results = await new AxeBuilder({ page })
-  .exclude("#third-party-widget")      // Can't control this
-  .exclude("[data-ad-unit]")           // Ads managed externally
+  .exclude("#third-party-widget") // Can't control this
+  .exclude("[data-ad-unit]") // Ads managed externally
   .analyze();
 ```
 
@@ -110,19 +112,17 @@ const results = await new AxeBuilder({ page })
   .analyze();
 
 // Best practices (not WCAG requirements but recommended)
-const results = await new AxeBuilder({ page })
-  .withTags(["best-practice"])
-  .analyze();
+const results = await new AxeBuilder({ page }).withTags(["best-practice"]).analyze();
 ```
 
 ### Common Tag Sets
 
-| Target | Tags |
-|--------|------|
-| WCAG 2.1 AA | `["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]` |
-| WCAG 2.2 AA | Add `"wcag22aa"` |
-| Section 508 | `["section508"]` |
-| Best practices | `["best-practice"]` |
+| Target         | Tags                                           |
+| -------------- | ---------------------------------------------- |
+| WCAG 2.1 AA    | `["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]` |
+| WCAG 2.2 AA    | Add `"wcag22aa"`                               |
+| Section 508    | `["section508"]`                               |
+| Best practices | `["best-practice"]`                            |
 
 ## Creating Reusable Fixtures
 
@@ -135,11 +135,12 @@ import AxeBuilder from "@axe-core/playwright";
 
 export const test = base.extend({
   makeAxeBuilder: async ({ page }, use) => {
-    const makeAxeBuilder = () => new AxeBuilder({ page })
-      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-      .exclude("#cookie-banner")  // Known third-party issue
-      .exclude("[data-testid='ad-unit']");
-    
+    const makeAxeBuilder = () =>
+      new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .exclude("#cookie-banner") // Known third-party issue
+        .exclude("[data-testid='ad-unit']");
+
     await use(makeAxeBuilder);
   },
 });
@@ -154,9 +155,9 @@ import { test, expect } from "./fixtures/axe";
 
 test("product page is accessible", async ({ page, makeAxeBuilder }) => {
   await page.goto("/products/123");
-  
+
   const results = await makeAxeBuilder().analyze();
-  
+
   expect(results.violations).toEqual([]);
 });
 ```
@@ -169,13 +170,13 @@ test("product page is accessible", async ({ page, makeAxeBuilder }) => {
 const results = await new AxeBuilder({ page }).analyze();
 
 // Structure of a violation
-results.violations.forEach(violation => {
+results.violations.forEach((violation) => {
   console.log(`Rule: ${violation.id}`);
-  console.log(`Impact: ${violation.impact}`);  // minor, moderate, serious, critical
+  console.log(`Impact: ${violation.impact}`); // minor, moderate, serious, critical
   console.log(`Description: ${violation.description}`);
   console.log(`Help: ${violation.helpUrl}`);
-  
-  violation.nodes.forEach(node => {
+
+  violation.nodes.forEach((node) => {
     console.log(`  Element: ${node.html}`);
     console.log(`  Fix: ${node.failureSummary}`);
   });
@@ -184,12 +185,12 @@ results.violations.forEach(violation => {
 
 ### Impact Levels
 
-| Level | Description | Priority |
-|-------|-------------|----------|
-| Critical | Blocks access for some users | Fix immediately |
-| Serious | Major barriers | Fix soon |
-| Moderate | Inconsistencies | Plan to fix |
-| Minor | Annoyances | Improve when possible |
+| Level    | Description                  | Priority              |
+| -------- | ---------------------------- | --------------------- |
+| Critical | Blocks access for some users | Fix immediately       |
+| Serious  | Major barriers               | Fix soon              |
+| Moderate | Inconsistencies              | Plan to fix           |
+| Minor    | Annoyances                   | Improve when possible |
 
 ### Progressive Enforcement
 
@@ -197,14 +198,12 @@ Start permissive, tighten over time:
 
 ```javascript
 // Phase 1: Only critical issues fail
-const criticalViolations = results.violations.filter(
-  v => v.impact === "critical"
-);
+const criticalViolations = results.violations.filter((v) => v.impact === "critical");
 expect(criticalViolations).toEqual([]);
 
 // Phase 2: Critical and serious
-const seriousViolations = results.violations.filter(
-  v => ["critical", "serious"].includes(v.impact)
+const seriousViolations = results.violations.filter((v) =>
+  ["critical", "serious"].includes(v.impact),
 );
 expect(seriousViolations).toEqual([]);
 
@@ -218,7 +217,7 @@ When you have a known issue being addressed:
 
 ```javascript
 const results = await new AxeBuilder({ page })
-  .disableRules(["color-contrast"])  // Tracked in JIRA-123
+  .disableRules(["color-contrast"]) // Tracked in JIRA-123
   .analyze();
 ```
 
@@ -234,17 +233,13 @@ Test components in isolation:
 test.describe("Button component", () => {
   test("default button is accessible", async ({ page }) => {
     await page.goto("/storybook/button--default");
-    const results = await new AxeBuilder({ page })
-      .include("#storybook-root")
-      .analyze();
+    const results = await new AxeBuilder({ page }).include("#storybook-root").analyze();
     expect(results.violations).toEqual([]);
   });
-  
+
   test("disabled button is accessible", async ({ page }) => {
     await page.goto("/storybook/button--disabled");
-    const results = await new AxeBuilder({ page })
-      .include("#storybook-root")
-      .analyze();
+    const results = await new AxeBuilder({ page }).include("#storybook-root").analyze();
     expect(results.violations).toEqual([]);
   });
 });
@@ -260,13 +255,13 @@ test("checkout flow is accessible at each step", async ({ page }) => {
   await page.goto("/cart");
   let results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
-  
+
   // Shipping form
   await page.getByRole("link", { name: /checkout/i }).click();
   await page.getByRole("heading", { name: /shipping/i }).waitFor();
   results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
-  
+
   // Payment form
   await page.getByRole("button", { name: /continue/i }).click();
   await page.getByRole("heading", { name: /payment/i }).waitFor();
@@ -282,19 +277,17 @@ Always re-scan after content changes:
 ```javascript
 test("modal is accessible when opened", async ({ page }) => {
   await page.goto("/");
-  
+
   // Initial page scan
   let results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
-  
+
   // Open modal
   await page.getByRole("button", { name: /settings/i }).click();
   await page.getByRole("dialog").waitFor();
-  
+
   // Scan modal
-  results = await new AxeBuilder({ page })
-    .include("[role='dialog']")
-    .analyze();
+  results = await new AxeBuilder({ page }).include("[role='dialog']").analyze();
   expect(results.violations).toEqual([]);
 });
 ```
@@ -305,15 +298,15 @@ test("modal is accessible when opened", async ({ page }) => {
 
 ```html
 <!-- BAD -->
-<input type="email" placeholder="Email">
+<input type="email" placeholder="Email" />
 
 <!-- GOOD -->
 <label for="email">Email address</label>
-<input id="email" type="email">
+<input id="email" type="email" />
 
 <!-- ALSO GOOD (visually hidden label) -->
 <label for="search" class="visually-hidden">Search products</label>
-<input id="search" type="search" placeholder="Search...">
+<input id="search" type="search" placeholder="Search..." />
 ```
 
 ### Color Contrast
@@ -353,7 +346,8 @@ test("modal is accessible when opened", async ({ page }) => {
 ```html
 <!-- BAD -->
 <input id="email" />
-<input id="email" />  <!-- Duplicate! -->
+<input id="email" />
+<!-- Duplicate! -->
 
 <!-- GOOD -->
 <input id="billing-email" />
