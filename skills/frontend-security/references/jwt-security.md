@@ -232,7 +232,7 @@ const encryptedToken = encrypt(token, encryptionKey);
 function authenticateToken(req, res, next) {
   // Get token from header
   const authHeader = req.headers.authorization;
-  const token = authHeader?.split(" ")[1]; // "Bearer TOKEN"
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
 
   if (!token) {
     return res.status(401).json({ error: "Token required" });

@@ -117,8 +117,13 @@ Named elements (id, name attributes) create global variables:
 
 ```javascript
 // 1. Use Object.hasOwn() or hasOwnProperty()
-if (Object.hasOwn(window, "config") && typeof config === "object") {
-  // Safe to use config
+if (
+  Object.hasOwn(window, "config") &&
+  typeof window.config === "object" &&
+  window.config !== null &&
+  !(window.config instanceof Element)
+) {
+  // Safe to use window.config
 }
 
 // 2. Access through document methods
@@ -196,7 +201,7 @@ window.addEventListener("message", (event) => {
   }
 
   // Validate data structure
-  if (typeof event.data !== "object" || !event.data.type) {
+  if (event.data === null || typeof event.data !== "object" || !event.data.type) {
     return;
   }
 

@@ -89,10 +89,10 @@ ever touches the repository.
 > [npm-trusted-publisher userscript](https://github.com/sxzz/userscripts/blob/main/src/npm-trusted-publisher.md)
 > to configure them rapidly.
 
-### 2.2 · Node.js version requirement
+### 2.2 · npm CLI version requirement
 
-The publish step **must** use Node.js ≥ 24.8.0 for automatic OIDC trusted publishing. If the
-project's CI matrix uses an older version, add a step before publishing:
+The publish step **must** use npm CLI ≥ 11.5.1 for automatic OIDC trusted publishing.
+Node.js 24 bundles npm 11.5.1; with older CI images, add a step before publishing:
 
 ```yaml
 - run: npm i -g npm

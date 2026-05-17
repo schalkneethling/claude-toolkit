@@ -64,6 +64,7 @@ echo -n 'console.log("hello");' | openssl sha256 -binary | openssl base64
 ### Express.js
 
 ```javascript
+const crypto = require("crypto");
 const helmet = require("helmet");
 
 // Nonce middleware

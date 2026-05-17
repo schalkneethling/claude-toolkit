@@ -223,12 +223,16 @@ Bun.serve({
 ### File Handling
 
 ```javascript
+const path = require("path");
+
 // Validate file paths
 function safeReadFile(userPath) {
   const baseDir = "/app/public";
-  const resolved = Bun.resolveSync(userPath, baseDir);
+  const safeBaseDir = path.resolve(baseDir);
+  const resolved = path.resolve(safeBaseDir, userPath);
+  const relativePath = path.relative(safeBaseDir, resolved);
 
-  if (!resolved.startsWith(baseDir)) {
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
     throw new Error("Path traversal detected");
   }
 

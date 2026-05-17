@@ -116,6 +116,10 @@ function validateFetchMetadata(req, res, next) {
 const crypto = require("crypto");
 
 const CSRF_COOKIE_NAME = "csrf_token";
+if (!/^[a-f0-9]{64,}$/i.test(process.env.CSRF_SECRET || "")) {
+  throw new Error("CSRF_SECRET must be a hex-encoded secret with at least 32 bytes of entropy");
+}
+
 const CSRF_SECRET = Buffer.from(process.env.CSRF_SECRET, "hex");
 
 function signToken(sessionId, nonce) {

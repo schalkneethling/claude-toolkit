@@ -105,7 +105,7 @@ function main() {
   try {
     input = JSON.parse(raw);
   } catch {
-    process.stderr.write(`[auto-approve-safe-commands] Failed to parse stdin JSON: ${raw}\n`);
+    process.stderr.write(`[auto-approve-safe-commands] Failed to parse stdin JSON\n`);
     defer();
     return;
   }
@@ -114,6 +114,11 @@ function main() {
     defer();
     return;
   }
+  if (typeof input.tool_input !== "object" || input.tool_input === null) {
+    defer();
+    return;
+  }
+
   const { command } = input.tool_input;
   if (typeof command !== "string") {
     defer();

@@ -134,8 +134,11 @@ const FILE_SIGNATURES = {
 async function validateFileSignature(filePath, expectedType) {
   const buffer = Buffer.alloc(8);
   const fd = await fs.open(filePath, "r");
-  await fd.read(buffer, 0, 8, 0);
-  await fd.close();
+  try {
+    await fd.read(buffer, 0, 8, 0);
+  } finally {
+    await fd.close();
+  }
 
   const signature = FILE_SIGNATURES[expectedType];
   if (!signature) return false;
