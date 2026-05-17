@@ -84,9 +84,7 @@ function readManifest(): Manifest {
   }
 
   try {
-    const parsed = JSON.parse(
-      readFileSync(MANIFEST_PATH, "utf8"),
-    ) as Partial<Manifest>;
+    const parsed = JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as Partial<Manifest>;
     return {
       commands: parsed.commands ?? {},
       hooks: parsed.hooks ?? {},
@@ -217,9 +215,7 @@ function normalizeCollectionItemType(
     return "skill";
   }
 
-  throw new Error(
-    `Collection "${collectionName}" has unsupported item type "${type}"`,
-  );
+  throw new Error(`Collection "${collectionName}" has unsupported item type "${type}"`);
 }
 
 function resolveSourcePath(src: string, kind: string, collectionName: string): string {
@@ -262,9 +258,7 @@ function inferItemNameFromSource(
 
 function readCollectionsConfig(): CollectionConfig[] {
   if (!existsSync(CONFIG_PATH)) {
-    throw new Error(
-      `Collections config not found: ${relative(TOOLKIT_ROOT, CONFIG_PATH)}`,
-    );
+    throw new Error(`Collections config not found: ${relative(TOOLKIT_ROOT, CONFIG_PATH)}`);
   }
 
   let parsed: unknown;
@@ -303,9 +297,7 @@ function readCollectionsConfig(): CollectionConfig[] {
 
     const validatedItems = items.map((item, itemIndex) => {
       if (!isPlainObject(item)) {
-        throw new Error(
-          `Collection "${name}" item at index ${itemIndex} must be an object`,
-        );
+        throw new Error(`Collection "${name}" item at index ${itemIndex} must be an object`);
       }
       if (typeof item.type !== "string" || item.type.trim().length === 0) {
         throw new Error(
@@ -412,9 +404,7 @@ function installHook(name: string, srcDir: string): void {
   if (existsSync(fragmentPath)) {
     const fragment = JSON.parse(readFileSync(fragmentPath, "utf8"));
     const settingsPath = join(CLAUDE_DIR, "settings.json");
-    const current = existsSync(settingsPath)
-      ? JSON.parse(readFileSync(settingsPath, "utf8"))
-      : {};
+    const current = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, "utf8")) : {};
     const merged = deepMerge(current, fragment);
     writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + "\n");
   }
@@ -544,13 +534,10 @@ async function update(force: boolean): Promise<void> {
 
     const sourceHash = hashHookSource(name);
     const installedPath = join(CLAUDE_DIR, "hooks", `${name}.mjs`);
-    const installedHash = existsSync(installedPath)
-      ? shortHash(readFileSync(installedPath))
-      : null;
+    const installedHash = existsSync(installedPath) ? shortHash(readFileSync(installedPath)) : null;
 
     const sourceChanged = sourceHash !== entry.hash;
-    const locallyModified =
-      installedHash !== null && installedHash !== entry.hash;
+    const locallyModified = installedHash !== null && installedHash !== entry.hash;
 
     if (!sourceChanged && !locallyModified) {
       continue;
@@ -566,9 +553,7 @@ async function update(force: boolean): Promise<void> {
     }
 
     if (sourceChanged) {
-      const oldSrc = existsSync(installedPath)
-        ? readFileSync(installedPath, "utf8")
-        : "";
+      const oldSrc = existsSync(installedPath) ? readFileSync(installedPath, "utf8") : "";
       const newSrc = readFileSync(join(srcDir, "hook.mjs"), "utf8");
       console.log(`\n~ hook: ${name} (${entry.hash} → ${sourceHash})`);
       console.log(diffLines(oldSrc, newSrc));
@@ -752,10 +737,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (
-    command === "add" &&
-    (resource === "collection" || resource === "collections")
-  ) {
+  if (command === "add" && (resource === "collection" || resource === "collections")) {
     if (!name) {
       usage();
     }
@@ -777,10 +759,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (
-    command === "list" &&
-    (resource === "collection" || resource === "collections")
-  ) {
+  if (command === "list" && (resource === "collection" || resource === "collections")) {
     listCollections();
     return;
   }

@@ -94,7 +94,7 @@ To use these tokens in your project, import this file in your main CSS file or H
 **In CSS:**
 
 ```css
-@import url('path/to/tokens.css');
+@import url("path/to/tokens.css");
 ```
 
 **In HTML:**

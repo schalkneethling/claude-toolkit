@@ -19,15 +19,13 @@ type Rule = {
 const rules: Rule[] = [
   {
     id: "rm-rf",
-    test: (c) =>
-      /\brm\s+(?:-[a-zA-Z]*[rRf][a-zA-Z]*|--recursive|--force)(?:\s|$)/.test(c),
+    test: (c) => /\brm\s+(?:-[a-zA-Z]*[rRf][a-zA-Z]*|--recursive|--force)(?:\s|$)/.test(c),
     message:
       "`rm -rf` (and flag variants) is blocked. Delete specific paths with a non-recursive `rm`, or move them to a backup location.",
   },
   {
     id: "git-push-force",
-    test: (c) =>
-      /\bgit\s+push\b.*\s(?:--force\b|--force-with-lease\b|-f\b)/.test(c),
+    test: (c) => /\bgit\s+push\b.*\s(?:--force\b|--force-with-lease\b|-f\b)/.test(c),
     message:
       "`git push --force` is blocked. Use `--force-with-lease` only after coordinating with collaborators, or create a new branch.",
   },
@@ -49,9 +47,8 @@ const rules: Rule[] = [
   {
     id: "chmod-777",
     test: (c) =>
-      /\bchmod\s+(?:-[a-zA-Z]*\s+)*(?:777|[ugoa]*[+=][rwx]*w[rwx]*(?:\s|$))/.test(
-        c,
-      ) && /-R|--recursive|777/.test(c),
+      /\bchmod\s+(?:-[a-zA-Z]*\s+)*(?:777|[ugoa]*[+=][rwx]*w[rwx]*(?:\s|$))/.test(c) &&
+      /-R|--recursive|777/.test(c),
     message:
       "`chmod 777` or recursive world-writable chmod is blocked. Grant the minimum permissions required.",
   },
@@ -62,24 +59,19 @@ const rules: Rule[] = [
   },
   {
     id: "system-redirect",
-    test: (c) =>
-      /(?:>|>>|tee(?:\s+-[a-zA-Z]*)?)\s+\/(?:etc|boot|usr|bin|sbin)\//.test(c),
+    test: (c) => /(?:>|>>|tee(?:\s+-[a-zA-Z]*)?)\s+\/(?:etc|boot|usr|bin|sbin)\//.test(c),
     message:
       "Writing into /etc, /boot, /usr, /bin, or /sbin is blocked. These are system directories; use a user-writable path.",
   },
   {
     id: "fork-bomb",
-    test: (c) =>
-      /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(c) ||
-      /\.\s*\|\s*\.\s*&/.test(c),
+    test: (c) => /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(c) || /\.\s*\|\s*\.\s*&/.test(c),
     message: "Fork bomb pattern detected and blocked.",
   },
   {
     id: "curl-pipe-shell",
     test: (c) =>
-      /\b(?:curl|wget|fetch)\b[^|;]*\|\s*(?:sudo\s+)?(?:bash|sh|zsh|fish|ksh|dash)\b/.test(
-        c,
-      ),
+      /\b(?:curl|wget|fetch)\b[^|;]*\|\s*(?:sudo\s+)?(?:bash|sh|zsh|fish|ksh|dash)\b/.test(c),
     message:
       "Piping remote content directly into a shell is blocked. Download the script, inspect it, then run it.",
   },
@@ -92,11 +84,8 @@ const rules: Rule[] = [
   {
     id: "kill-9",
     test: (c) =>
-      /\bkill\s+(?:-[a-zA-Z]*\s+)*-9\b|\bkill\s+-s\s+(?:9|SIGKILL)\b|\bkill\s+-SIGKILL\b/.test(
-        c,
-      ),
-    message:
-      "`kill -9` is blocked — it prevents cleanup. Try SIGTERM (default) first.",
+      /\bkill\s+(?:-[a-zA-Z]*\s+)*-9\b|\bkill\s+-s\s+(?:9|SIGKILL)\b|\bkill\s+-SIGKILL\b/.test(c),
+    message: "`kill -9` is blocked — it prevents cleanup. Try SIGTERM (default) first.",
   },
   {
     id: "npm-publish",
@@ -107,8 +96,7 @@ const rules: Rule[] = [
   {
     id: "history-clear",
     test: (c) => /\bhistory\s+-c\b/.test(c),
-    message:
-      "`history -c` is blocked — erasing shell history hides what happened.",
+    message: "`history -c` is blocked — erasing shell history hides what happened.",
   },
 ];
 

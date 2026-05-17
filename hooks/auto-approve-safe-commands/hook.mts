@@ -149,9 +149,7 @@ function main(): void {
   try {
     input = JSON.parse(raw) as PermissionRequestInput;
   } catch {
-    process.stderr.write(
-      `[auto-approve-safe-commands] Failed to parse stdin JSON: ${raw}\n`,
-    );
+    process.stderr.write(`[auto-approve-safe-commands] Failed to parse stdin JSON: ${raw}\n`);
     defer();
     return;
   }
@@ -173,9 +171,7 @@ function main(): void {
 
   for (const { pattern, label } of SAFE_PATTERNS) {
     if (pattern.test(trimmed)) {
-      process.stderr.write(
-        `[auto-approve-safe-commands] Auto-approved: ${label}\n`,
-      );
+      process.stderr.write(`[auto-approve-safe-commands] Auto-approved: ${label}\n`);
       approve();
       return;
     }
