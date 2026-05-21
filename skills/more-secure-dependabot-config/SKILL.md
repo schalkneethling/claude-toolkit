@@ -43,9 +43,6 @@ updates:
       interval: "daily"
     cooldown:
       default-days: 7
-      semver-major-days: 7
-      semver-minor-days: 3
-      semver-patch-days: 2
       include:
         - "*"
 ```
@@ -104,6 +101,7 @@ without repeating every field verbatim.
 ## Constraints
 
 - **Never omit the `cooldown` block** from any ecosystem entry.
+- **`semver-*` cooldown fields are only valid for package managers that use semver** (e.g. `npm`, `pip`, `cargo`). Do not include `semver-major-days`, `semver-minor-days`, or `semver-patch-days` for `github-actions` or any other non-semver ecosystem — Dependabot will reject the config.
 - **Never change the canonical values** unless the user explicitly requests it and
   provides a reason (e.g. a monorepo with a stricter release cadence).
 - **Always include `github-actions`** as an ecosystem, even if the user only asked
