@@ -192,7 +192,7 @@ jobs:
         run: |
           required="11.5.1"
           current="$(npm --version)"
-          if [ "$(printf '%s\n%s\n' "$required" "$current" | sort -V | head -n1)" != "$required" ]; then
+          if npx -y semver -r "<$required" --include-prerelease "$current" > /dev/null 2>&1; then
             echo "npm $current is below $required; upgrading."
             npm install -g npm@latest
           fi
@@ -250,7 +250,8 @@ ruby -e 'require "yaml"; YAML.load_file(".github/workflows/publish.yml"); puts "
 If the project uses pnpm, validate packing without publishing:
 
 ```bash
-pnpm pack --pack-destination /private/tmp
+pack_dir="$(mktemp -d)"
+pnpm pack --pack-destination "$pack_dir"
 ```
 
 Confirm no placeholder markers survived into the generated file, and that every action is pinned to a 40-character SHA rather than a tag:
@@ -260,6 +261,11 @@ Confirm no placeholder markers survived into the generated file, and that every 
 grep -n "PLACEHOLDER" .github/workflows/publish.yml
 
 # Every uses: line must reference a 40-hex SHA, not a tag
+if ! grep -qE "uses: [^@]+@" .github/workflows/publish.yml; then
+  echo "No uses lines found"
+  exit 1
+fi
+
 grep -nE "uses: [^@]+@[^ ]+" .github/workflows/publish.yml \
   | grep -vE "@[0-9a-f]{40} " && echo "Unpinned action found" || echo "All actions SHA-pinned"
 ```
@@ -272,7 +278,7 @@ grep -nE "uses: [^@]+@[^ ]+" .github/workflows/publish.yml \
 - npm silently publishing with a token despite trusted-publisher config: the runner's npm CLI is older than 11.5.1. This should not happen on the pinned Node 24.8.0 (which bundles npm 11.6.0); if the publish step was moved to an older Node, confirm the guard step actually upgraded npm and reported a version at or above 11.5.1.
 - Tests or build now run on a newer Node than the project targets (for example Node 24 when the project is on 22): `.nvmrc` was created or bumped to match the publish step. Reset it to the project's actual target; the publish step's 24.8.0 must stay confined to the publish job.
 - `package.json does not exist` from `setup-node`: the job uses `node-version-file` before checkout, or the publish job only downloaded an artifact.
-- `pnpm/action-setup` cannot resolve a version: the `packageManager` field is missing, or a known v6 bug fails to read it when `package_json_file` is set. Pin to a known-good SHA and, if needed, set the `version` input explicitly as a fallback.
+- `pnpm/action-setup` cannot resolve a version: the `packageManager` field is missing, or the v6 bug in [pnpm/action-setup#227](https://github.com/pnpm/action-setup/issues/227) occasionally fails to read `packageManager` from `package.json` when `package_json_file` is set, causing version resolution to fail. Pin `pnpm/action-setup` to a known-good SHA and, if needed, set the `version` input explicitly as a fallback.
 - Publishing an already-published version will fail even after the workflow is fixed.
 
 ## External Setup Reminder
