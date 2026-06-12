@@ -73,8 +73,8 @@ User or authenticated UI/API access required:
 - Do not use self-hosted runners for npm trusted publishing unless official npm docs currently
   support them.
 
-> **Package manager note.** All examples in this skill use `npm` to match the e18e source
-> material, but nothing here is npm-specific. Always use whichever package manager the project
+> **Package manager note.** The example install and configuration commands in this skill use `npm`
+> to match the e18e source material, but should be adapted to whichever package manager the project
 > already uses — `pnpm`, `yarn`, `bun`, etc. Adapt commands accordingly:
 >
 > | npm                               | pnpm                                              | yarn                                              |
@@ -86,6 +86,10 @@ User or authenticated UI/API access required:
 > Detect the project's package manager by checking for a lockfile (`pnpm-lock.yaml`,
 > `yarn.lock`, `bun.lockb`) or a `packageManager` field in `package.json` before
 > generating any commands or workflow steps.
+>
+> Section 2.2's trusted-publishing requirement is npm-specific: the publish step must run with a
+> supported Node.js version and npm CLI version even when the rest of the workflow uses another
+> package manager.
 
 ---
 

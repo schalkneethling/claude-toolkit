@@ -29,7 +29,7 @@ Users can ask for checkpoint, handoff, or reset in natural language:
 
 - For a checkpoint, report the current version, latest plan path, feedback status, approval status, and recommended next action.
 - For a handoff, summarize the goal, current plan, feedback status, approval status, important assumptions, unresolved decisions, and recommended next action.
-- For a reset, empty only `.plan-review` while keeping the `.plan-review` directory itself. Do not remove source files or any other workspace files.
+- For a reset, first require explicit confirmation by asking the user to type `RESET` or by accepting an explicit `--force` request. After confirmation, empty only the contents of `.plan-review` while keeping the `.plan-review` directory itself. Do not remove source files or any other workspace files.
 
 ## Task Modes
 
@@ -113,6 +113,15 @@ Include:
 - Recommended next action.
 
 Prefer reading the current plan and feedback files directly instead of relying on chat history.
+
+### Reset
+
+Reset the review-loop state only after explicit confirmation:
+
+1. If the user did not provide an explicit `--force` request, ask them to type `RESET`.
+2. Proceed only when the user confirms exactly.
+3. Empty the contents of `.plan-review`, preserving the `.plan-review` directory itself.
+4. Do not remove source files or any workspace files outside `.plan-review`.
 
 ## File Convention
 
