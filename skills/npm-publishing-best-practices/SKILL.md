@@ -1,12 +1,13 @@
 ---
 name: npm-package-publishing
 description: >
-  Apply best practices when publishing npm packages, including secure CI/CD workflows, trusted
-  publishing via OIDC, GitHub repository hardening, and supply-chain attack prevention. Use this
-  skill whenever the user asks about publishing an npm package, setting up a publish workflow,
-  configuring GitHub Actions for release automation, managing npm tokens or secrets, setting up
-  changesets, or auditing an existing publishing pipeline for security. Also trigger when the user
-  mentions publint, OIDC trusted publishing, release automation, or package versioning workflows.
+  Audit and improve the security posture of npm package publishing: account security, npm trusted
+  publishing strategy, GitHub repository hardening, token removal, release governance, dependency
+  update policy, provenance, and supply-chain risk. Use when the user asks about npm publishing best
+  practices, publishing security, OIDC/trusted publishing strategy, npm token hygiene, release
+  automation posture, Changesets versus changelog strategies, publint, provenance, or auditing an
+  existing publishing pipeline. For writing or debugging the concrete GitHub Actions publish
+  workflow file, use the npm-trusted-publishing-github-workflow skill instead.
 ---
 
 # npm Package Publishing — Best Practices
@@ -14,8 +15,66 @@ description: >
 Based on the [e18e publishing guide](https://e18e.dev/docs/publishing.html). Reference it for
 the canonical source; this skill distils the actionable steps.
 
-> **Package manager note.** All examples in this skill use `npm` to match the e18e source
-> material, but nothing here is npm-specific. Always use whichever package manager the project
+## Agent Workflow
+
+1. Inspect the repository before recommending changes:
+   - `package.json`
+   - lockfiles and `packageManager`
+   - `.npmrc`, `.yarnrc.yml`, `.github/workflows/*`
+   - release tooling such as Changesets, changelogithub, semantic-release, or release-it
+   - existing npm/GitHub tokens or `NODE_AUTH_TOKEN` usage in workflows
+2. Classify the request:
+   - **Audit**: report risks by severity, with file and line references where possible.
+   - **Implementation**: make scoped repository changes, then run relevant validation.
+   - **Strategy**: explain tradeoffs and identify user-only settings.
+3. Separate agent-doable work from user-only UI work. Do not claim account, npmjs.com, or GitHub
+   settings are configured unless verified by authenticated tool/API access.
+4. For concrete GitHub Actions publish workflow creation or CI failure debugging, hand off to the
+   `npm-trusted-publishing-github-workflow` skill.
+
+## Freshness Rule
+
+Before changing trusted publishing requirements, supported CI providers, npm CLI minimums, Node.js
+minimums, provenance behavior, or GitHub release/security settings, verify the current official npm
+and GitHub documentation when browsing is available. These requirements change over time.
+
+## Responsibility Split
+
+Agent can usually:
+
+- Edit `.github/workflows/*`.
+- Add or update repository package-manager config such as `.npmrc` or `.yarnrc.yml`.
+- Remove `NODE_AUTH_TOKEN` usage from publish steps when trusted publishing is used.
+  If private dependencies require registry auth during install, keep that token scoped to read-only
+  install steps only.
+- Add Dependabot/Renovate config.
+- Run `publint`, workflow linting, tests, package builds, and other local validation.
+- Report exact user steps for npm/GitHub settings.
+
+User or authenticated UI/API access required:
+
+- Enable npm/GitHub 2FA.
+- Configure npm trusted publisher settings on npmjs.com.
+- Set package publishing access to require 2FA and disallow tokens.
+- Enable GitHub repository/org Actions restrictions.
+- Configure branch/tag rulesets and immutable releases.
+- Remove repository/org secrets when the agent lacks GitHub settings access.
+
+## Non-Negotiables
+
+- Do not add `NODE_AUTH_TOKEN` to publish steps when trusted publishing is available.
+  Use OIDC for publishing; if private dependencies require install auth, use a read-only token only
+  for the install step.
+- Do not store npm publish tokens in GitHub Actions secrets for OIDC-capable publishing.
+- Do not run install lifecycle scripts in release workflows unless the user explicitly accepts the
+  risk.
+- Do not show tag-pinned actions as compliant with SHA pinning; resolve actions to full commit SHAs.
+- Do not say npm/GitHub account settings are complete unless they were actually checked.
+- Do not use self-hosted runners for npm trusted publishing unless official npm docs currently
+  support them.
+
+> **Package manager note.** The example install and configuration commands in this skill use `npm`
+> to match the e18e source material, but should be adapted to whichever package manager the project
 > already uses — `pnpm`, `yarn`, `bun`, etc. Adapt commands accordingly:
 >
 > | npm                               | pnpm                                              | yarn                                              |
@@ -27,6 +86,10 @@ the canonical source; this skill distils the actionable steps.
 > Detect the project's package manager by checking for a lockfile (`pnpm-lock.yaml`,
 > `yarn.lock`, `bun.lockb`) or a `packageManager` field in `package.json` before
 > generating any commands or workflow steps.
+>
+> Section 2.2's trusted-publishing requirement is npm-specific: the publish step must run with a
+> supported Node.js version and npm CLI version even when the rest of the workflow uses another
+> package manager.
 
 ---
 
@@ -92,7 +155,8 @@ ever touches the repository.
 ### 2.2 · npm CLI version requirement
 
 The publish step **must** use npm CLI ≥ 11.5.1 for automatic OIDC trusted publishing.
-Node.js 24 bundles npm 11.5.1; with older CI images, add a step before publishing:
+Node.js 22.14.0 or newer can use trusted publishing when the workflow installs npm CLI 11.5.1 or
+newer before publishing:
 
 ```yaml
 - run: npm i -g npm
@@ -277,6 +341,24 @@ all other security recommendations in this document regardless.
 
 ---
 
+## Audit Output Format
+
+For audits, lead with findings:
+
+- **P0/P1/P2/P3** severity.
+- File and line when repo-local.
+- Risk.
+- Recommended fix.
+- Whether the agent can implement it now or the user must configure it externally.
+
+Then include:
+
+- Validation run.
+- Remaining user-only checklist.
+- Suggested next change.
+
+---
+
 ## Quick Reference Checklist
 
 Use this when setting up a new package or auditing an existing one.
@@ -299,7 +381,7 @@ Use this when setting up a new package or auditing an existing one.
 
 - [ ] OIDC trusted publisher configured on npmjs.com
 - [ ] "Require 2FA, disallow tokens" enabled on npm
-- [ ] Publish step uses Node.js ≥ 24.8.0
+- [ ] Publish step uses npm CLI ≥ 11.5.1 and a Node.js version supported by official npm docs
 - [ ] GitHub environment (`publish`) configured with branch restrictions
 
 ### Workflow hygiene

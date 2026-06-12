@@ -1,15 +1,11 @@
 # claude-toolkit
 
-CLI for managing [Claude Code](https://claude.com/claude-code) hooks, skills, commands, and collections across projects. Hooks are copied into a project's `.claude/` directory; skills are copied into `.claude-toolkit/skills/` and symlinked into wherever Claude Code expects to find them; commands are copied into `.claude/commands/`; collections install any combination of those resources from a bundled root config.
+CLI for managing [Claude Code](https://claude.com/claude-code) hooks, skills, and collections across projects. Hooks are copied into a project's `.claude/` directory; skills are copied into `.claude-toolkit/skills/` and symlinked into wherever Claude Code expects to find them; collections install any combination of those resources from a bundled root config.
 
 ## Repo layout
 
 ```plaintext
 .
-├── commands/                       # Claude Code custom slash commands (*.md)
-│   ├── rpm-start.md
-│   ├── rpm-advance.md
-│   └── ...
 ├── config.json                     # bundled collection definitions
 ├── hooks/
 │   ├── auto-approve-safe-commands/
@@ -33,7 +29,7 @@ CLI for managing [Claude Code](https://claude.com/claude-code) hooks, skills, co
 - Node.js 22+
 - `tsx` (installed as a devDependency)
 
-From inside a consuming project, run the CLI with `tsx /path/to/claude-toolkit/cli/index.ts <command>`, or link it as `toolkit` on your `PATH`.
+From inside a consuming project, run the CLI with `tsx /path/to/claude-toolkit/src/index.ts <command>`, or link it as `toolkit` on your `PATH`.
 
 ## Commands
 
@@ -49,17 +45,9 @@ Copies `skills/<name>/` into `<project>/.claude-toolkit/skills/<name>/` and crea
 toolkit add skill css-shared-first --link .claude/skills --link docs/skills
 ```
 
-### `toolkit add command <name>`
-
-Copies `commands/<name>.md` into `<project>/.claude/commands/<name>.md`. Records the source hash in `.claude/toolkit-manifest.json`.
-
-```
-toolkit add command rpm-start
-```
-
 ### `toolkit add collections <name>`
 
-Reads the root `config.json`, resolves the named collection, and installs each referenced hook, skill, and command using the same underlying logic as the individual `add` commands.
+Reads the root `config.json`, resolves the named collection, and installs each referenced hook and skill using the same underlying logic as the individual `add` commands.
 
 ```bash
 toolkit add collections web
@@ -73,9 +61,9 @@ For every entry in `.claude/toolkit-manifest.json`, compares the current source 
 - If the installed file was modified locally (its hash differs from the one recorded in the manifest), warns and skips unless `--force` is passed.
 - Silent if everything is current.
 
-### `toolkit list hook` / `toolkit list skill` / `toolkit list command`
+### `toolkit list hook` / `toolkit list skill`
 
-Lists available hooks, skills, or commands shipped by this repo, with the current source hash.
+Lists available hooks or skills shipped by this repo, with the current source hash.
 
 ### `toolkit list collections`
 
@@ -109,13 +97,12 @@ Collections are defined in the repo root `config.json` as an array:
 ```
 
 - `name` must be unique.
-- `items` may contain `skill`, `hook`, or `command` entries.
-- `src` must point to a top-level entry under `skills/`, `hooks/`, or `commands/`.
-- Plural `type` values such as `commands` are also accepted for compatibility.
+- `items` may contain `skill` or `hook` entries.
+- `src` must point to a top-level entry under `skills/` or `hooks/`.
+- Plural `type` values such as `skills` are also accepted for compatibility.
 
 ## Versioning
 
-- Each command is hashed over its `.md` file only.
 - Each hook is hashed over `hook.mjs` only (not the README or `settings-fragment.json`).
 - Each skill is hashed over every file in the skill directory (sorted by path).
 - SHA-256, truncated to the first 7 hex characters.
@@ -126,12 +113,6 @@ The CLI writes `<project>/.claude/toolkit-manifest.json`:
 
 ```json
 {
-  "commands": {
-    "rpm-start": {
-      "hash": "b8e2a1f",
-      "installedAt": "2026-04-18"
-    }
-  },
   "hooks": {
     "block-dangerous-commands": {
       "hash": "a3f9c2d",
