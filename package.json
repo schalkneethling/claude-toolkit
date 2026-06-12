@@ -7,7 +7,6 @@
     "toolkit": "./dist/index.mjs"
   },
   "files": [
-    "commands",
     "config.json",
     "dist",
     "hooks",

@@ -1,3 +1,8 @@
+---
+name: refined-plan-mode
+description: Use this skill when the user asks to plan, review, revise, continue, checkpoint, handoff, reset, or execute work using Refined Plan Mode. Also use it for legacy /rpm:start, /rpm:advance, /rpm:review, /rpm:feedback, /rpm:checkpoint, and /rpm:handoff prompts.
+---
+
 # Refined Plan Mode
 
 Use this skill when the user asks to plan, review, revise, continue, checkpoint, handoff, reset, or execute work using Refined Plan Mode.
@@ -25,6 +30,89 @@ Users can ask for checkpoint, handoff, or reset in natural language:
 - For a checkpoint, report the current version, latest plan path, feedback status, approval status, and recommended next action.
 - For a handoff, summarize the goal, current plan, feedback status, approval status, important assumptions, unresolved decisions, and recommended next action.
 - For a reset, empty only `.plan-review` while keeping the `.plan-review` directory itself. Do not remove source files or any other workspace files.
+
+## Task Modes
+
+Treat these legacy `/rpm:*` prompts as natural-language requests for this skill:
+
+### `/rpm:start`
+
+Start a plan review loop for the user's current task.
+
+1. Inspect the repository enough to understand the task and relevant constraints.
+2. Ask only blocking clarification questions. If reasonable assumptions are available, state them in the plan instead of stopping.
+3. Create `.plan-review/plans/plan-v1.md` with the complete plan.
+4. Create or update `.plan-review/.current-version` with `v1`.
+5. Reply with a concise summary and tell the user the plan is ready for review in Refined Plan Mode.
+
+Do not implement the plan yet unless the user explicitly asks you to proceed without review.
+
+### `/rpm:advance`
+
+Continue the loop from the current state.
+
+1. Inspect `.plan-review/.current-version`, `.plan-review/approved-plan.md`, available plan files, and available feedback files.
+2. If an approved plan exists, execute that plan.
+3. If feedback exists for the current plan version, incorporate it into the next plan version.
+4. If there is a current plan but no feedback or approval, remind the user that the plan is awaiting review.
+5. If no plan exists, start with `/rpm:start` behavior.
+
+Keep the response focused on the next state transition.
+
+### `/rpm:review`
+
+Audit the latest plan before the user reviews it.
+
+1. Read the current plan version.
+2. Review the plan for missing context, vague steps, untested assumptions, risky sequencing, and weak validation.
+3. If improvements are needed, write a revised next version and update `.plan-review/.current-version`.
+4. If the plan is already review-ready, leave files unchanged.
+5. Reply with either the new plan version written or a short explanation that the current plan is ready for review.
+
+This mode reviews plan quality. It does not implement the plan.
+
+### `/rpm:feedback`
+
+Incorporate submitted feedback into the next plan version.
+
+1. Read `.plan-review/.current-version` to find the current version.
+2. Read `.plan-review/feedback/plan-vN-feedback.json` for that version.
+3. Read `.plan-review/plans/plan-vN.md`.
+4. Address every feedback item in a revised plan, adding a `Feedback Addressed` section that maps comments to changes made.
+5. Write the revision to `.plan-review/plans/plan-vN+1.md`.
+6. Update `.plan-review/.current-version` to the new version.
+7. Reply with a short note naming the feedback file read and the new plan file written.
+
+If the feedback file is missing, report the exact path expected and stop.
+
+### `/rpm:checkpoint`
+
+Summarize the current review-loop state.
+
+Report:
+
+- Current plan version from `.plan-review/.current-version`, if present.
+- Latest plan file path.
+- Whether feedback exists for the current version.
+- Whether `.plan-review/approved-plan.md` exists.
+- The recommended next action.
+
+Do not modify files unless the user also asks you to advance or revise the plan.
+
+### `/rpm:handoff`
+
+Prepare a compact continuation summary for another agent or a future session.
+
+Include:
+
+- Goal.
+- Current plan version and file path.
+- Feedback status.
+- Approval status.
+- Important assumptions or unresolved decisions.
+- Recommended next action.
+
+Prefer reading the current plan and feedback files directly instead of relying on chat history.
 
 ## File Convention
 

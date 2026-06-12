@@ -1,17 +1,15 @@
 #!/usr/bin/env node
 
 /**
- * toolkit — personal CLI for managing Claude Code hooks, skills, and commands.
+ * toolkit — personal CLI for managing Claude Code hooks and skills.
  *
  * Commands:
  *   toolkit add hook <name>
  *   toolkit add skill <name> [--link <target>...]
- *   toolkit add command <name>
  *   toolkit add collections <name>
  *   toolkit update [--force]
  *   toolkit list hook
  *   toolkit list skill
- *   toolkit list command
  *   toolkit list collections
  */
 
@@ -36,7 +34,6 @@ import { parseArgs } from "node:util";
 const TOOLKIT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const HOOKS_SRC = join(TOOLKIT_ROOT, "hooks");
 const SKILLS_SRC = join(TOOLKIT_ROOT, "skills");
-const COMMANDS_SRC = join(TOOLKIT_ROOT, "commands");
 const CONFIG_PATH = join(TOOLKIT_ROOT, "config.json");
 
 const PROJECT_ROOT = process.cwd();
@@ -46,13 +43,11 @@ const MANIFEST_PATH = join(CLAUDE_DIR, "toolkit-manifest.json");
 
 type HookEntry = { hash: string; installedAt: string };
 type SkillEntry = { hash: string; installedAt: string; linkedTo: string[] };
-type CommandEntry = { hash: string; installedAt: string };
 type Manifest = {
-  commands: Record<string, CommandEntry>;
   hooks: Record<string, HookEntry>;
   skills: Record<string, SkillEntry>;
 };
-type CollectionItemKind = "command" | "hook" | "skill";
+type CollectionItemKind = "hook" | "skill";
 type CollectionItemConfig = {
   type: CollectionItemKind | `${CollectionItemKind}s`;
   src: string;
@@ -80,18 +75,17 @@ function shortHash(content: string | Buffer): string {
 
 function readManifest(): Manifest {
   if (!existsSync(MANIFEST_PATH)) {
-    return { commands: {}, hooks: {}, skills: {} };
+    return { hooks: {}, skills: {} };
   }
 
   try {
     const parsed = JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as Partial<Manifest>;
     return {
-      commands: parsed.commands ?? {},
       hooks: parsed.hooks ?? {},
       skills: parsed.skills ?? {},
     };
   } catch {
-    return { commands: {}, hooks: {}, skills: {} };
+    return { hooks: {}, skills: {} };
   }
 }
 
@@ -116,11 +110,6 @@ function deepMerge<T>(target: T, source: T): T {
     return out as T;
   }
   return source;
-}
-
-function hashCommandSource(name: string): string {
-  const p = join(COMMANDS_SRC, `${name}.md`);
-  return shortHash(readFileSync(p));
 }
 
 function hashHookSource(name: string): string {
@@ -190,7 +179,7 @@ function diffLines(oldStr: string, newStr: string): string {
   return out.join("\n");
 }
 
-// ---------- commands ----------
+// ---------- resources ----------
 
 function sanitizeName(name: string, kind: string): string {
   name = basename(name);
@@ -205,9 +194,6 @@ function normalizeCollectionItemType(
   type: CollectionItemConfig["type"],
   collectionName: string,
 ): CollectionItemKind {
-  if (type === "command" || type === "commands") {
-    return "command";
-  }
   if (type === "hook" || type === "hooks") {
     return "hook";
   }
@@ -233,19 +219,6 @@ function inferItemNameFromSource(
   sourcePath: string,
   collectionName: string,
 ): string {
-  if (type === "command") {
-    if (
-      dirname(sourcePath) !== COMMANDS_SRC ||
-      !sourcePath.startsWith(COMMANDS_SRC + sep) ||
-      !sourcePath.endsWith(".md")
-    ) {
-      throw new Error(
-        `Collection "${collectionName}" command source must point to a markdown file directly under commands/: ${relative(TOOLKIT_ROOT, sourcePath)}`,
-      );
-    }
-    return basename(sourcePath, ".md");
-  }
-
   const expectedRoot = type === "hook" ? HOOKS_SRC : SKILLS_SRC;
   if (dirname(sourcePath) !== expectedRoot || !sourcePath.startsWith(expectedRoot + sep)) {
     throw new Error(
@@ -353,36 +326,6 @@ function resolveCollection(name: string): ResolvedCollectionItem[] {
   return [...deduped.values()];
 }
 
-function installCommand(name: string, src: string): void {
-  if (!existsSync(src)) {
-    console.error(`Command not found: ${name}`);
-    process.exit(1);
-  }
-
-  const commandsDir = join(CLAUDE_DIR, "commands");
-  mkdirSync(commandsDir, { recursive: true });
-  const dest = resolve(commandsDir, `${name}.md`);
-  if (!dest.startsWith(commandsDir + sep)) {
-    console.error("Invalid command name");
-    process.exit(1);
-  }
-  writeFileSync(dest, readFileSync(src));
-
-  const manifest = readManifest();
-  manifest.commands[name] = {
-    hash: hashCommandSource(name),
-    installedAt: today(),
-  };
-  writeManifest(manifest);
-
-  console.log(`Installed command: ${name} → ${relative(PROJECT_ROOT, dest)}`);
-}
-
-function addCommand(name: string): void {
-  name = sanitizeName(name, "command");
-  installCommand(name, join(COMMANDS_SRC, `${name}.md`));
-}
-
 function installHook(name: string, srcDir: string): void {
   if (!existsSync(srcDir)) {
     console.error(`Hook not found: ${name}`);
@@ -483,16 +426,6 @@ function addCollection(name: string): void {
       : itemStats.isDirectory()
         ? "directory"
         : "other";
-
-    if (item.type === "command") {
-      if (!itemStats.isFile()) {
-        throw new Error(
-          `Collection "${item.collection}" expected command source "${item.sourcePath}" to be a file, found ${actualKind}`,
-        );
-      }
-      installCommand(item.sourceName, item.sourcePath);
-      continue;
-    }
 
     if (item.type === "hook") {
       if (!itemStats.isDirectory()) {
@@ -595,53 +528,12 @@ async function update(force: boolean): Promise<void> {
     };
   }
 
-  for (const [name, entry] of Object.entries(manifest.commands)) {
-    const src = join(COMMANDS_SRC, `${name}.md`);
-    if (!existsSync(src)) {
-      continue;
-    }
-
-    const sourceHash = hashCommandSource(name);
-    if (sourceHash === entry.hash) {
-      continue;
-    }
-
-    changed = true;
-    console.log(`\n~ command: ${name} (${entry.hash} → ${sourceHash})`);
-    const ok = force || (await confirm(`Update command "${name}"?`));
-    if (!ok) {
-      continue;
-    }
-
-    const dest = join(CLAUDE_DIR, "commands", `${name}.md`);
-    writeFileSync(dest, readFileSync(src));
-    manifest.commands[name] = { hash: sourceHash, installedAt: today() };
-  }
-
   if (changed) {
     writeManifest(manifest);
   }
 }
 
-function list(kind: "hook" | "skill" | "command"): void {
-  if (kind === "command") {
-    if (!existsSync(COMMANDS_SRC)) {
-      console.log("(no commands available)");
-      return;
-    }
-    const files = readdirSync(COMMANDS_SRC)
-      .filter((f) => f.endsWith(".md"))
-      .map((f) => f.replace(/\.md$/, ""));
-    if (files.length === 0) {
-      console.log("(no commands available)");
-      return;
-    }
-    for (const name of files) {
-      console.log(`${name}  ${hashCommandSource(name)}`);
-    }
-    return;
-  }
-
+function list(kind: "hook" | "skill"): void {
   const dir = kind === "hook" ? HOOKS_SRC : SKILLS_SRC;
   if (!existsSync(dir)) {
     console.log(`(no ${kind}s available)`);
@@ -681,12 +573,10 @@ function usage(): never {
     `Usage:
   toolkit add hook <name>
   toolkit add skill <name> [--link <target>]...
-  toolkit add command <name>
   toolkit add collections <name>
   toolkit update [--force]
   toolkit list hook
   toolkit list skill
-  toolkit list command
   toolkit list collections`,
   );
   process.exit(1);
@@ -728,15 +618,6 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (command === "add" && resource === "command") {
-    if (!name) {
-      usage();
-    }
-
-    addCommand(name);
-    return;
-  }
-
   if (command === "add" && (resource === "collection" || resource === "collections")) {
     if (!name) {
       usage();
@@ -751,11 +632,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (
-    command === "list" &&
-    (resource === "hook" || resource === "skill" || resource === "command")
-  ) {
-    list(resource as "hook" | "skill" | "command");
+  if (command === "list" && (resource === "hook" || resource === "skill")) {
+    list(resource as "hook" | "skill");
     return;
   }
 
