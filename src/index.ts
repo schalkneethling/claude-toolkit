@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 
 /**
- * toolkit — personal CLI for managing Claude Code hooks and skills.
+ * toolkit — personal CLI for managing Claude Code hooks, skills, and agents.
  *
  * Commands:
  *   toolkit add hook <name>
  *   toolkit add skill <name> [--link <target>...]
+ *   toolkit add agent <name> [--link <target>...]
  *   toolkit add collections <name>
  *   toolkit update [--force]
  *   toolkit list hook
  *   toolkit list skill
+ *   toolkit list agent
  *   toolkit list collections
  */
 
@@ -34,6 +36,7 @@ import { parseArgs } from "node:util";
 const TOOLKIT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const HOOKS_SRC = join(TOOLKIT_ROOT, "hooks");
 const SKILLS_SRC = join(TOOLKIT_ROOT, "skills");
+const AGENTS_SRC = join(TOOLKIT_ROOT, "agents");
 const CONFIG_PATH = join(TOOLKIT_ROOT, "config.json");
 
 const PROJECT_ROOT = process.cwd();
@@ -43,11 +46,13 @@ const MANIFEST_PATH = join(CLAUDE_DIR, "toolkit-manifest.json");
 
 type HookEntry = { hash: string; installedAt: string };
 type SkillEntry = { hash: string; installedAt: string; linkedTo: string[] };
+type AgentEntry = { hash: string; installedAt: string; linkedTo: string[] };
 type Manifest = {
   hooks: Record<string, HookEntry>;
   skills: Record<string, SkillEntry>;
+  agents: Record<string, AgentEntry>;
 };
-type CollectionItemKind = "hook" | "skill";
+type CollectionItemKind = "hook" | "skill" | "agent";
 type CollectionItemConfig = {
   type: CollectionItemKind | `${CollectionItemKind}s`;
   src: string;
@@ -75,7 +80,7 @@ function shortHash(content: string | Buffer): string {
 
 function readManifest(): Manifest {
   if (!existsSync(MANIFEST_PATH)) {
-    return { hooks: {}, skills: {} };
+    return { hooks: {}, skills: {}, agents: {} };
   }
 
   try {
@@ -83,9 +88,10 @@ function readManifest(): Manifest {
     return {
       hooks: parsed.hooks ?? {},
       skills: parsed.skills ?? {},
+      agents: parsed.agents ?? {},
     };
   } catch {
-    return { hooks: {}, skills: {} };
+    return { hooks: {}, skills: {}, agents: {} };
   }
 }
 
@@ -128,6 +134,10 @@ function hashSkillSource(name: string): string {
     h.update("\0");
   }
   return h.digest("hex").slice(0, 7);
+}
+
+function hashAgentSource(name: string): string {
+  return shortHash(readFileSync(join(AGENTS_SRC, `${name}.md`)));
 }
 
 function collectFiles(dir: string): string[] {
@@ -190,6 +200,11 @@ function sanitizeName(name: string, kind: string): string {
   return name;
 }
 
+function sanitizeAgentName(name: string): string {
+  const sanitized = sanitizeName(name, "agent");
+  return sanitized.endsWith(".md") ? sanitized.slice(0, -3) : sanitized;
+}
+
 function normalizeCollectionItemType(
   type: CollectionItemConfig["type"],
   collectionName: string,
@@ -199,6 +214,9 @@ function normalizeCollectionItemType(
   }
   if (type === "skill" || type === "skills") {
     return "skill";
+  }
+  if (type === "agent" || type === "agents") {
+    return "agent";
   }
 
   throw new Error(`Collection "${collectionName}" has unsupported item type "${type}"`);
@@ -219,11 +237,20 @@ function inferItemNameFromSource(
   sourcePath: string,
   collectionName: string,
 ): string {
-  const expectedRoot = type === "hook" ? HOOKS_SRC : SKILLS_SRC;
+  const expectedRoot = type === "hook" ? HOOKS_SRC : type === "skill" ? SKILLS_SRC : AGENTS_SRC;
   if (dirname(sourcePath) !== expectedRoot || !sourcePath.startsWith(expectedRoot + sep)) {
     throw new Error(
       `Collection "${collectionName}" ${type} source must point to a top-level entry under ${relative(TOOLKIT_ROOT, expectedRoot)}/: ${relative(TOOLKIT_ROOT, sourcePath)}`,
     );
+  }
+
+  if (type === "agent") {
+    if (!sourcePath.endsWith(".md")) {
+      throw new Error(
+        `Collection "${collectionName}" agent source must point to a Markdown file: ${relative(TOOLKIT_ROOT, sourcePath)}`,
+      );
+    }
+    return basename(sourcePath, ".md");
   }
 
   return basename(sourcePath);
@@ -411,6 +438,54 @@ function addSkill(name: string, links: string[]): void {
   installSkill(name, join(SKILLS_SRC, name), links);
 }
 
+function installAgent(name: string, srcFile: string, links: string[]): void {
+  if (!existsSync(srcFile) || !statSync(srcFile).isFile()) {
+    console.error(`Agent not found: ${name}`);
+    process.exit(1);
+  }
+
+  const agentsRoot = join(TOOLKIT_DIR, "agents");
+  const destFile = resolve(agentsRoot, `${name}.md`);
+  if (!destFile.startsWith(agentsRoot + sep)) {
+    console.error("Invalid agent name");
+    process.exit(1);
+  }
+  mkdirSync(dirname(destFile), { recursive: true });
+  writeFileSync(destFile, readFileSync(srcFile));
+
+  const resolvedLinks = links.length > 0 ? links : [join(".claude", "agents")];
+  for (const link of resolvedLinks) {
+    const linkDir = resolve(PROJECT_ROOT, link);
+    mkdirSync(linkDir, { recursive: true });
+
+    const linkPath = join(linkDir, `${name}.md`);
+    if (existsSync(linkPath) || lstatExists(linkPath)) {
+      unlinkSync(linkPath);
+    }
+
+    const relTarget = relative(linkDir, destFile);
+    symlinkSync(relTarget, linkPath, "file");
+  }
+
+  const manifest = readManifest();
+  manifest.agents[name] = {
+    hash: hashAgentSource(name),
+    installedAt: today(),
+    linkedTo: resolvedLinks,
+  };
+  writeManifest(manifest);
+
+  console.log(`Installed agent: ${name} → ${relative(PROJECT_ROOT, destFile)}`);
+  for (const l of resolvedLinks) {
+    console.log(`  linked: ${join(l, `${name}.md`)}`);
+  }
+}
+
+function addAgent(name: string, links: string[]): void {
+  name = sanitizeAgentName(name);
+  installAgent(name, join(AGENTS_SRC, `${name}.md`), links);
+}
+
 function addCollection(name: string): void {
   const items = resolveCollection(name);
   for (const item of items) {
@@ -437,12 +512,22 @@ function addCollection(name: string): void {
       continue;
     }
 
-    if (!itemStats.isDirectory()) {
+    if (item.type === "skill") {
+      if (!itemStats.isDirectory()) {
+        throw new Error(
+          `Collection "${item.collection}" expected skill source "${item.sourcePath}" to be a directory, found ${actualKind}`,
+        );
+      }
+      installSkill(item.sourceName, item.sourcePath, []);
+      continue;
+    }
+
+    if (!itemStats.isFile()) {
       throw new Error(
-        `Collection "${item.collection}" expected skill source "${item.sourcePath}" to be a directory, found ${actualKind}`,
+        `Collection "${item.collection}" expected agent source "${item.sourcePath}" to be a file, found ${actualKind}`,
       );
     }
-    installSkill(item.sourceName, item.sourcePath, []);
+    installAgent(item.sourceName, item.sourcePath, []);
   }
 }
 
@@ -528,20 +613,71 @@ async function update(force: boolean): Promise<void> {
     };
   }
 
+  for (const [name, entry] of Object.entries(manifest.agents)) {
+    const srcFile = join(AGENTS_SRC, `${name}.md`);
+    if (!existsSync(srcFile)) {
+      continue;
+    }
+
+    const sourceHash = hashAgentSource(name);
+    const destFile = join(TOOLKIT_DIR, "agents", `${name}.md`);
+    const installedHash = existsSync(destFile) ? shortHash(readFileSync(destFile)) : null;
+
+    const sourceChanged = sourceHash !== entry.hash;
+    const locallyModified = installedHash !== null && installedHash !== entry.hash;
+
+    if (!sourceChanged && !locallyModified) {
+      continue;
+    }
+
+    changed = true;
+
+    if (locallyModified && !force) {
+      console.warn(
+        `! agent "${name}" was modified locally (installed=${installedHash}, manifest=${entry.hash}). Use --force to overwrite.`,
+      );
+      continue;
+    }
+
+    if (sourceChanged) {
+      const oldSrc = existsSync(destFile) ? readFileSync(destFile, "utf8") : "";
+      const newSrc = readFileSync(srcFile, "utf8");
+      console.log(`\n~ agent: ${name} (${entry.hash} → ${sourceHash})`);
+      console.log(diffLines(oldSrc, newSrc));
+      const ok = force || (await confirm(`Update agent "${name}"?`));
+
+      if (!ok) {
+        continue;
+      }
+
+      mkdirSync(dirname(destFile), { recursive: true });
+      writeFileSync(destFile, newSrc);
+      manifest.agents[name] = {
+        hash: sourceHash,
+        installedAt: today(),
+        linkedTo: entry.linkedTo,
+      };
+    }
+  }
+
   if (changed) {
     writeManifest(manifest);
   }
 }
 
-function list(kind: "hook" | "skill"): void {
-  const dir = kind === "hook" ? HOOKS_SRC : SKILLS_SRC;
+function list(kind: CollectionItemKind): void {
+  const dir = kind === "hook" ? HOOKS_SRC : kind === "skill" ? SKILLS_SRC : AGENTS_SRC;
   if (!existsSync(dir)) {
     console.log(`(no ${kind}s available)`);
     return;
   }
   const entries = readdirSync(dir, { withFileTypes: true })
-    .filter((e) => e.isDirectory() || (kind === "skill" && e.isSymbolicLink()))
-    .map((e) => e.name);
+    .filter(
+      (e) =>
+        (kind !== "agent" && (e.isDirectory() || (kind === "skill" && e.isSymbolicLink()))) ||
+        (kind === "agent" && e.isFile() && e.name.endsWith(".md")),
+    )
+    .map((e) => (kind === "agent" ? basename(e.name, ".md") : e.name));
 
   if (entries.length === 0) {
     console.log(`(no ${kind}s available)`);
@@ -549,7 +685,8 @@ function list(kind: "hook" | "skill"): void {
   }
 
   for (const name of entries) {
-    const hash = kind === "hook" ? hashHookSource(name) : hashSkillSource(name);
+    const hash =
+      kind === "hook" ? hashHookSource(name) : kind === "skill" ? hashSkillSource(name) : hashAgentSource(name);
     console.log(`${name}  ${hash}`);
   }
 }
@@ -573,10 +710,12 @@ function usage(): never {
     `Usage:
   toolkit add hook <name>
   toolkit add skill <name> [--link <target>]...
+  toolkit add agent <name> [--link <target>]...
   toolkit add collections <name>
   toolkit update [--force]
   toolkit list hook
   toolkit list skill
+  toolkit list agent
   toolkit list collections`,
   );
   process.exit(1);
@@ -589,6 +728,10 @@ async function main(): Promise<void> {
         default: false,
         type: "boolean",
       },
+      link: {
+        multiple: true,
+        type: "string",
+      },
       links: {
         multiple: true,
         type: "string",
@@ -597,7 +740,8 @@ async function main(): Promise<void> {
     allowPositionals: true,
   });
 
-  const { force, links } = values;
+  const { force, link, links } = values;
+  const linkTargets = [...(link ?? []), ...(links ?? [])];
   const [command, resource, name] = positionals;
 
   if (command === "add" && resource === "hook") {
@@ -614,7 +758,16 @@ async function main(): Promise<void> {
       usage();
     }
 
-    addSkill(name, links ? links : []);
+    addSkill(name, linkTargets);
+    return;
+  }
+
+  if (command === "add" && resource === "agent") {
+    if (!name) {
+      usage();
+    }
+
+    addAgent(name, linkTargets);
     return;
   }
 
@@ -632,8 +785,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (command === "list" && (resource === "hook" || resource === "skill")) {
-    list(resource as "hook" | "skill");
+  if (command === "list" && (resource === "hook" || resource === "skill" || resource === "agent")) {
+    list(resource);
     return;
   }
 
