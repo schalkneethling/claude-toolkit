@@ -23,5 +23,22 @@
         "src": "skills/frontend-security"
       }
     ]
+  },
+  {
+    "name": "code-review",
+    "items": [
+      {
+        "type": "skill",
+        "src": "skills/code-review"
+      },
+      {
+        "type": "skill",
+        "src": "skills/semantic-html"
+      },
+      {
+        "type": "skill",
+        "src": "skills/css-coder"
+      }
+    ]
   }
 ]
