@@ -1,12 +1,13 @@
 # claude-toolkit
 
-CLI for managing [Claude Code](https://claude.com/claude-code) hooks, skills, and collections across projects. Hooks are copied into a project's `.claude/` directory; skills are copied into `.claude-toolkit/skills/` and symlinked into wherever Claude Code expects to find them; collections install any combination of those resources from a bundled root config.
+CLI for managing [Claude Code](https://claude.com/claude-code) hooks, skills, agents, and collections across projects. Hooks are copied into a project's `.claude/` directory; skills and agents are copied into `.claude-toolkit/` and symlinked into wherever Claude Code expects to find them; collections install any combination of those resources from a bundled root config.
 
 ## Repo layout
 
 ```plaintext
 .
 ├── config.json                     # bundled collection definitions
+├── agents/                         # Claude Code subagent Markdown files
 ├── hooks/
 │   ├── auto-approve-safe-commands/
 │   │   ├── hook.mjs                # the hook script itself
@@ -45,9 +46,17 @@ Copies `skills/<name>/` into `<project>/.claude-toolkit/skills/<name>/` and crea
 toolkit add skill css-shared-first --link .claude/skills --link docs/skills
 ```
 
+### `toolkit add agent <name> [--link <target>]...`
+
+Copies `agents/<name>.md` into `<project>/.claude-toolkit/agents/<name>.md` and creates a symlink to that file inside each `--link` target. If no `--link` is given, the default is `.claude/agents`. Repeat `--link` to create symlinks in multiple locations.
+
+```
+toolkit add agent technical-devils-advocate
+```
+
 ### `toolkit add collections <name>`
 
-Reads the root `config.json`, resolves the named collection, and installs each referenced hook and skill using the same underlying logic as the individual `add` commands.
+Reads the root `config.json`, resolves the named collection, and installs each referenced hook, skill, or agent using the same underlying logic as the individual `add` commands.
 
 ```bash
 toolkit add collections web
@@ -61,9 +70,9 @@ For every entry in `.claude/toolkit-manifest.json`, compares the current source 
 - If the installed file was modified locally (its hash differs from the one recorded in the manifest), warns and skips unless `--force` is passed.
 - Silent if everything is current.
 
-### `toolkit list hook` / `toolkit list skill`
+### `toolkit list hook` / `toolkit list skill` / `toolkit list agent`
 
-Lists available hooks or skills shipped by this repo, with the current source hash.
+Lists available hooks, skills, or agents shipped by this repo, with the current source hash.
 
 ### `toolkit list collections`
 
@@ -90,6 +99,10 @@ Collections are defined in the repo root `config.json` as an array:
       {
         "type": "skill",
         "src": "skills/semantic-html"
+      },
+      {
+        "type": "agent",
+        "src": "agents/technical-devils-advocate.md"
       }
     ]
   }
@@ -97,14 +110,15 @@ Collections are defined in the repo root `config.json` as an array:
 ```
 
 - `name` must be unique.
-- `items` may contain `skill` or `hook` entries.
-- `src` must point to a top-level entry under `skills/` or `hooks/`.
+- `items` may contain `skill`, `hook`, or `agent` entries.
+- `src` must point to a top-level entry under `skills/`, `hooks/`, or `agents/`.
 - Plural `type` values such as `skills` are also accepted for compatibility.
 
 ## Versioning
 
 - Each hook is hashed over `hook.mjs` only (not the README or `settings-fragment.json`).
 - Each skill is hashed over every file in the skill directory (sorted by path).
+- Each agent is hashed over its Markdown source file.
 - SHA-256, truncated to the first 7 hex characters.
 
 ## Manifest format
@@ -125,9 +139,22 @@ The CLI writes `<project>/.claude/toolkit-manifest.json`:
       "installedAt": "2026-04-18",
       "linkedTo": [".claude/skills"]
     }
+  },
+  "agents": {
+    "technical-devils-advocate": {
+      "hash": "c110f5e",
+      "installedAt": "2026-04-18",
+      "linkedTo": [".claude/agents"]
+    }
   }
 }
 ```
+
+## Bundled agents
+
+### `technical-devils-advocate`
+
+A Claude Code project subagent for challenging feature plans, system designs, and implementation approaches before work begins. It surfaces assumptions, risks, edge cases, alternatives, dependencies, scale concerns, and operability questions, then recommends whether to proceed, pivot, or pause.
 
 ## Bundled hooks
 
