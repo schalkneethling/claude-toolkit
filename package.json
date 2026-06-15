@@ -1,7 +1,7 @@
 {
   "name": "@schalkneethling/toolkit",
-  "version": "1.0.0",
-  "description": "CLI for managing Claude Code hooks, skills, and agents across projects.",
+  "version": "1.1.0",
+  "description": "CLI for managing Agent hooks, skills, and agents across projects.",
   "license": "MIT",
   "bin": {
     "toolkit": "./dist/index.mjs"
