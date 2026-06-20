@@ -24,6 +24,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
   symlinkSync,
   unlinkSync,
@@ -208,6 +209,7 @@ const RESOURCE_CONFIGS = {
     hashSource: hashDirectorySource,
     copySource: (sourcePath: string, installPath: string) => {
       mkdirSync(dirname(installPath), { recursive: true });
+      rmSync(installPath, { force: true, recursive: true });
       cpSync(sourcePath, installPath, { recursive: true });
     },
     readSourceText: () => "",
@@ -624,7 +626,7 @@ async function updateResources(
       continue;
     }
 
-    if (!sourceChanged) {
+    if (!sourceChanged && !force) {
       continue;
     }
 
