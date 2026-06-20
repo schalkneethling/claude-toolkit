@@ -4,11 +4,11 @@ description: >
   Generate, repair, or debug the GitHub Actions workflow FILE that performs an OIDC
   trusted publish of a pnpm package — the concrete publish.yml, its test → build →
   publish job shape, the package tarball artifact handoff, Node-version inference from
-  package.json, pnpm setup via pnpm/action-setup, the npm-CLI-version upgrade step, and
+  package.json, pnpm and runtime setup via pnpm/setup, the npm-CLI-version upgrade step, and
   repository.url/Sigstore provenance matching. Use when the user wants the actual
   workflow written or fixed, or is debugging a specific CI failure: npm publish
   E404/E403/422, NODE_AUTH_TOKEN appearing unexpectedly, provenance or id-token errors,
-  pnpm/action-setup version resolution, or actions/setup-node node-version-file problems.
+  pnpm/setup version resolution, or runtime version problems.
   For the broader publishing SECURITY POSTURE — account 2FA, repository and branch
   hardening, GitHub environments, changesets versus changelogithub, sole-maintainer risk,
   or auditing an existing pipeline — use the npm-package-publishing skill instead.
@@ -31,12 +31,12 @@ One number to keep consistent between the two: both skills use Node 24.8.0 or hi
 1. Inspect `package.json`, `.npmrc`, lockfiles, and existing `.github/workflows/*.yml`.
 2. Resolve every workflow dependency to its latest stable version at the moment the file is created, and pin each to the full-length commit SHA of that version. Never leave third-party or GitHub-owned actions pinned to tag-based refs such as `@v4`, `@v6`, or `@v7` in the final workflow; tag refs weaken supply-chain integrity and violate pinned-action policy. The SHAs in this skill's template are placeholders that will be out of date; never copy them verbatim. See "Pinning actions to current SHAs" below for the procedure.
 3. Preserve pinned action SHAs when they already exist; annotate each with a version comment so Dependabot can bump it.
-4. Drive the test and build jobs' Node version from the project's **existing** target, not from a number invented for this workflow. Read it from the repo's current `.nvmrc`, `.node-version`, `volta.node`, or CI config; if none exists, ask the developer rather than guessing. Use `node-version-file: .nvmrc` for these jobs (do not point them at `package.json`, which falls through to the `engines.node` range — an unbounded range like `>=20` resolves to the newest Node release, so CI silently floats away from the version developers actually run). `.nvmrc` is a development and CI file only; npm never reads it during a consumer install, so it does not constrain consumers.
+4. Drive the test and build jobs' Node version from the project's **existing** target, not from a number invented for this workflow. Read it from the repo's current `devEngines.runtime`, `.nvmrc`, `.node-version`, `volta.node`, or CI config; if none exists, ask the developer rather than guessing. For pnpm projects, prefer `pnpm/setup` and either let it read `devEngines.runtime` from `package.json` or set its `runtime` input to the resolved existing target, such as `node@22`. Do not point runtime selection at `engines.node`, which is the consumer compatibility range — an unbounded range like `>=20` can float CI away from the version developers actually run.
 5. Never raise the project's Node version, create a new `.nvmrc`, or overwrite an existing one to "match" the publish step. The publish step's Node 24.8.0 (step 11) is an isolated requirement of the publish action and must not propagate to `.nvmrc`, to `engines.node`, or to the test and build jobs. A project that targets Node 22 keeps testing and building on Node 22; only the final `npm publish` invocation runs on 24.8.0, and it does not rebuild the artifact. Conflating these two numbers is the most likely way this skill is misapplied — do not do it.
 6. Ensure every job that reads the repo (including any reading `.nvmrc`) runs `actions/checkout` first.
-7. Install pnpm with `pnpm/action-setup`, omitting the `version` input so the version is read from the `packageManager` field. Do not use Corepack: it is still marked experimental and downloads the package manager from the network on first use, which is an avoidable failure surface in a release pipeline.
-8. `pnpm/action-setup` does not install Node.js, so always run `actions/setup-node` as a separate step.
-9. Disable setup-node package-manager caching for release/publish workflows with `package-manager-cache: false`.
+7. For pnpm workflows, use `pnpm/setup` from the GitHub Marketplace instead of combining `pnpm/action-setup` with `actions/setup-node`. It installs pnpm from `@pnpm/exe` and installs the requested JavaScript runtime through `pnpm runtime set` in one step. Pin it to a full commit SHA like every other action.
+8. Set `install: false` on `pnpm/setup` in release/publish workflows, then run `pnpm install --frozen-lockfile --ignore-scripts` explicitly. The action can auto-install by default, but release workflows should keep install flags visible and hardened.
+9. Do not use Corepack in release workflows: it is still marked experimental and downloads the package manager from the network on first use, which is an avoidable failure surface in a release pipeline.
 10. Set `persist-credentials: false` on every `actions/checkout` step. Never rely on checkout's default credential persistence. If a workflow genuinely must push to git, use an explicit, narrowly scoped credential only for that push step.
 11. Target Node 24.8.0 or higher in the publish step. That floor bundles npm 11.6.0, which already exceeds the npm CLI 11.5.1 minimum trusted publishing requires, so no manual npm upgrade is needed there. Keep a guard step that upgrades npm only when the resolved Node ships an npm below 11.5.1, so the workflow stays correct if a project pins an older Node. An npm that is too old silently falls back to token auth or fails to attempt OIDC at all.
 12. Pack into a dedicated artifact directory, usually `package/*.tgz`.
@@ -61,16 +61,19 @@ later build, test, packaging, and artifact steps.
 
 ## Package Metadata
 
-Three different Node versions live in three different places, and keeping them separate is deliberate — conflating them is the main way this workflow goes wrong. `engines.node` in `package.json` is the _consumer_ floor: the only one that constrains people who install the package, and it should reflect what the package actually supports (npm warns, but does not hard-fail, when a consumer is outside it). The test and build jobs run on the project's _own_ target version, read from the existing `.nvmrc` (or `.node-version`/`volta.node`); this is never read during a consumer install, so it does not leak into the consumer contract. The publish step pins Node 24.8.0 or higher independently, purely because that floor bundles an npm new enough for OIDC. These three are not meant to agree: a repo can develop and test on Node 22, keep `engines.node` at its true support range, and still publish on Node 24 — all without affecting consumers, and without changing what the project builds and tests against.
+Three different Node versions live in three different places, and keeping them separate is deliberate — conflating them is the main way this workflow goes wrong. `engines.node` in `package.json` is the _consumer_ floor: the only one that constrains people who install the package, and it should reflect what the package actually supports (npm warns, but does not hard-fail, when a consumer is outside it). The test and build jobs run on the project's _own_ target version, read from `devEngines.runtime` or the existing `.nvmrc`/`.node-version`/`volta.node`/CI config; these are development and CI targets, so they do not leak into the consumer contract. The publish step pins Node 24.8.0 or higher independently, purely because that floor bundles an npm new enough for OIDC. These three are not meant to agree: a repo can develop and test on Node 22, keep `engines.node` at its true support range, and still publish on Node 24 — all without affecting consumers, and without changing what the project builds and tests against.
 
-The publish-step version must never be copied into the other two. Do not raise `engines.node` to 24.8.0, and do not set or bump `.nvmrc` to 24, to "make things consistent". Doing so would move the test and build jobs onto Node 24, so the package would be validated against a version above its actual target and a Node-22 incompatibility could ship uncaught. The publish job runs `npm publish` on the already-built tarball with scripts ignored, so its Node version never rebuilds or retests the code; it is inert with respect to the artifact.
+The publish-step version must never be copied into the other two. Do not raise `engines.node` to 24.8.0, and do not set or bump `.nvmrc` or `devEngines.runtime` to 24, to "make things consistent". Doing so would move the test and build jobs onto Node 24, so the package would be validated against a version above its actual target and a Node-22 incompatibility could ship uncaught. The publish job runs `npm publish` on the already-built tarball with scripts ignored, so its Node version never rebuilds or retests the code; it is inert with respect to the artifact.
 
 ```json
 {
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "pnpm@11.0.4",
+  "devEngines": {
+    "runtime": { "name": "node", "version": "^22.0.0", "onFail": "download" }
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/OWNER/REPO.git"
@@ -78,9 +81,13 @@ The publish-step version must never be copied into the other two. Do not raise `
 }
 ```
 
-The `engines.node` value above is the _consumer_ floor and should reflect what the package actually supports; `>=20` is only an example, and a bounded upper limit is sensible if the package genuinely needs one. Do not raise it to 24.8.0 to satisfy CI — the publish step pins its own Node version, and the test and build jobs read theirs from `.nvmrc`, so the trusted-publishing requirement never leaks into the consumer contract.
+The `engines.node` value above is the _consumer_ floor and should reflect what the package actually supports; `>=20` is only an example, and a bounded upper limit is sensible if the package genuinely needs one. Do not raise it to 24.8.0 to satisfy CI — the publish step pins its own Node version, and the test and build jobs read theirs from `devEngines.runtime` or another existing project target, so the trusted-publishing requirement never leaks into the consumer contract.
 
-Because the test and build jobs read `.nvmrc`, that file must exist in the repository root with a single version line matching the project's target (for example `22`). If the repo already has one, use it as-is and do not change it. If it has none, derive the value from the project's existing Node target (`.node-version`, `volta.node`, the previous CI config, or by asking the developer) before creating it — do not default to the publish step's 24.8.0. Alternatively, point those jobs' `node-version` at the project's explicit version instead of using a file.
+For pnpm projects, prefer declaring the development runtime in `devEngines.runtime` so `pnpm/setup`
+can read the runtime and version from `package.json`. If the repo already uses `.nvmrc`,
+`.node-version`, `volta.node`, or existing CI config instead, keep that source of truth and set
+`pnpm/setup`'s `runtime` input to the same resolved version. Do not default to the publish step's
+24.8.0.
 
 The `repository.url` field is not cosmetic. Provenance verification runs through Sigstore, which compares the repository in the OIDC token against `package.json`. A mismatch fails the publish with a 422 error that the user-facing npm docs do not explain. Make sure the owner/name in `repository.url` matches the repository actually running the workflow.
 
@@ -120,15 +127,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0 — PLACEHOLDER SHA, re-resolve before use
-        # version is read from the packageManager field in package.json
-
-      - name: Setup Node.js
-        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0 — PLACEHOLDER SHA, re-resolve before use
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@1111111111111111111111111111111111111111 # v1.0.0 — PLACEHOLDER SHA, re-resolve before use
         with:
-          node-version-file: .nvmrc # exact dev/CI version; decoupled from engines.node
-          package-manager-cache: false
+          # Runtime is read from devEngines.runtime when present. If the project uses
+          # .nvmrc/.node-version/volta instead, set runtime to that exact target
+          # (for example, runtime: node@22). Do not use engines.node here.
+          install: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -152,14 +157,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0 — PLACEHOLDER SHA, re-resolve before use
-
-      - name: Setup Node.js
-        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0 — PLACEHOLDER SHA, re-resolve before use
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@1111111111111111111111111111111111111111 # v1.0.0 — PLACEHOLDER SHA, re-resolve before use
         with:
-          node-version-file: .nvmrc # exact dev/CI version; decoupled from engines.node
-          package-manager-cache: false
+          # Runtime is read from devEngines.runtime when present. If the project uses
+          # .nvmrc/.node-version/volta instead, set runtime to that exact target
+          # (for example, runtime: node@22). Do not use engines.node here.
+          install: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -193,14 +197,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0 — PLACEHOLDER SHA, re-resolve before use
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@1111111111111111111111111111111111111111 # v1.0.0 — PLACEHOLDER SHA, re-resolve before use
         with:
           # Pinned for the publish step only. 24.8.0 bundles npm 11.6.0, new enough
           # for OIDC; this is independent of engines.node, the consumer floor.
-          node-version: 24.8.0
-          package-manager-cache: false
-          registry-url: https://registry.npmjs.org
+          runtime: node@24.8.0
+          install: false
 
       - name: Ensure npm is new enough for trusted publishing
         # No-op on Node >= 24.8.0; the guard only matters if Node is pinned lower.
@@ -229,7 +232,7 @@ jobs:
             exit 1
           fi
 
-          npm publish "$(realpath "$tarball")" --ignore-scripts --access public
+          npm publish "$(realpath "$tarball")" --ignore-scripts --access public --registry https://registry.npmjs.org
 ```
 
 ## Pinning actions to current SHAs
@@ -292,8 +295,9 @@ grep -nE "uses: [^@]+@[^ ]+" .github/workflows/publish.yml \
 - `422 Unprocessable Entity` during publish with provenance: the repository in the OIDC token does not match `package.json`. Check `repository.url` first.
 - npm silently publishing with a token despite trusted-publisher config: the runner's npm CLI is older than 11.5.1. This should not happen on the pinned Node 24.8.0 (which bundles npm 11.6.0); if the publish step was moved to an older Node, confirm the guard step actually upgraded npm and reported a version at or above 11.5.1.
 - Tests or build now run on a newer Node than the project targets (for example Node 24 when the project is on 22): `.nvmrc` was created or bumped to match the publish step. Reset it to the project's actual target; the publish step's 24.8.0 must stay confined to the publish job.
-- `package.json does not exist` from `setup-node`: the job uses `node-version-file` before checkout, or the publish job only downloaded an artifact.
-- `pnpm/action-setup` cannot resolve a version: the `packageManager` field is missing, or the v6 bug in [pnpm/action-setup#227](https://github.com/pnpm/action-setup/issues/227) occasionally fails to read `packageManager` from `package.json` when `package_json_file` is set, causing version resolution to fail. Pin `pnpm/action-setup` to a known-good SHA and, if needed, set the `version` input explicitly as a fallback.
+- `package.json does not exist` from `pnpm/setup`: the job runs setup before checkout, or `package-json-file` points at the wrong path.
+- `pnpm/setup` cannot resolve a pnpm version: the `packageManager` field is missing. Add the correct `packageManager` field or set the action's `version` input explicitly as a fallback.
+- `pnpm/setup` installs the wrong runtime: `devEngines.runtime` is missing or does not match the project's existing CI target. Add or correct `devEngines.runtime`, or set the action's `runtime` input explicitly.
 - Publishing an already-published version will fail even after the workflow is fixed.
 
 ## External Setup Reminder

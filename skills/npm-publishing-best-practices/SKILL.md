@@ -98,6 +98,14 @@ User or authenticated UI/API access required:
 > Section 2.2's trusted-publishing requirement is npm-specific: the publish step must run with a
 > supported Node.js version and npm CLI version even when the rest of the workflow uses another
 > package manager.
+>
+> For pnpm projects on GitHub Actions, prefer the Marketplace action
+> [`pnpm/setup`](https://github.com/marketplace/actions/setup-pnpm-with-runtime) to set up pnpm and
+> the JavaScript runtime in one step. It installs pnpm from `@pnpm/exe`, can read
+> `devEngines.runtime` from `package.json`, and replaces the separate
+> `pnpm/action-setup` + `actions/setup-node` pattern. In release workflows, pin `pnpm/setup` to a
+> full commit SHA, set `install: false`, and run the explicit hardened install command yourself so
+> flags like `--frozen-lockfile --ignore-scripts` remain visible.
 
 ---
 
