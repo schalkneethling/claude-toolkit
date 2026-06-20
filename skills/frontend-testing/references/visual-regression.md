@@ -299,18 +299,44 @@ Font rendering varies by OS. Options:
 
 ## CI/CD Configuration
 
+When adding GitHub Actions examples or workflow files, declare explicit least-privilege
+`GITHUB_TOKEN` permissions. Use a restrictive top-level default such as `contents: read`, then add
+job-level permissions only for jobs that need to push commits, update pull requests, publish pages,
+or write other repository resources.
+
+Pin every third-party or GitHub-owned action to a full-length commit SHA. Do not commit tag-based
+refs such as `@v6` or `@v7`; use those only as temporary input to a pinning tool, then keep the
+version as a comment beside the SHA.
+
+When a job checks out the repository, set `persist-credentials: false` on `actions/checkout`.
+Artifact-producing jobs should not keep the repository token persisted for later test, build, or
+upload steps.
+
 ### GitHub Actions Example
 
 ```yaml
-- name: Run visual tests
-  run: npx playwright test --project=chromium
+permissions:
+  contents: read
 
-- name: Upload diff artifacts on failure
-  if: failure()
-  uses: actions/upload-artifact@v7
-  with:
-    name: visual-diff
-    path: test-results/
+jobs:
+  visual-tests:
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4.2.2 - re-resolve before use
+        with:
+          persist-credentials: false
+
+      - name: Run visual tests
+        run: npx playwright test --project=chromium
+
+      - name: Upload diff artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1 - re-resolve before use
+        with:
+          name: visual-diff
+          path: test-results/
 ```
 
 ### Generate Baselines in CI
@@ -318,15 +344,30 @@ Font rendering varies by OS. Options:
 For consistent baselines, generate in CI:
 
 ```yaml
-- name: Update baselines
-  run: npx playwright test --update-snapshots
+permissions:
+  contents: read
 
-- name: Commit baselines
-  run: |
-    git config user.name "CI Bot"
-    git add "**/*.png"
-    git commit -m "Update visual baselines"
-    git push
+jobs:
+  update-baselines:
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4.2.2 - re-resolve before use
+        with:
+          persist-credentials: false
+
+      - name: Update baselines
+        run: npx playwright test --update-snapshots
+
+      - name: Commit baselines
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "CI Bot"
+          git add "**/*.png"
+          git commit -m "Update visual baselines"
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" push
 ```
 
 ## Organizing Screenshots

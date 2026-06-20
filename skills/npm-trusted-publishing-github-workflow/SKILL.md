@@ -29,7 +29,7 @@ One number to keep consistent between the two: both skills use Node 24.8.0 or hi
 ## Workflow
 
 1. Inspect `package.json`, `.npmrc`, lockfiles, and existing `.github/workflows/*.yml`.
-2. Resolve every workflow dependency to its latest stable version at the moment the file is created, and pin each to the full-length commit SHA of that version. The SHAs in this skill's template are placeholders that will be out of date; never copy them verbatim. See "Pinning actions to current SHAs" below for the procedure.
+2. Resolve every workflow dependency to its latest stable version at the moment the file is created, and pin each to the full-length commit SHA of that version. Never leave third-party or GitHub-owned actions pinned to tag-based refs such as `@v4`, `@v6`, or `@v7` in the final workflow; tag refs weaken supply-chain integrity and violate pinned-action policy. The SHAs in this skill's template are placeholders that will be out of date; never copy them verbatim. See "Pinning actions to current SHAs" below for the procedure.
 3. Preserve pinned action SHAs when they already exist; annotate each with a version comment so Dependabot can bump it.
 4. Drive the test and build jobs' Node version from the project's **existing** target, not from a number invented for this workflow. Read it from the repo's current `.nvmrc`, `.node-version`, `volta.node`, or CI config; if none exists, ask the developer rather than guessing. Use `node-version-file: .nvmrc` for these jobs (do not point them at `package.json`, which falls through to the `engines.node` range — an unbounded range like `>=20` resolves to the newest Node release, so CI silently floats away from the version developers actually run). `.nvmrc` is a development and CI file only; npm never reads it during a consumer install, so it does not constrain consumers.
 5. Never raise the project's Node version, create a new `.nvmrc`, or overwrite an existing one to "match" the publish step. The publish step's Node 24.8.0 (step 11) is an isolated requirement of the publish action and must not propagate to `.nvmrc`, to `engines.node`, or to the test and build jobs. A project that targets Node 22 keeps testing and building on Node 22; only the final `npm publish` invocation runs on 24.8.0, and it does not rebuild the artifact. Conflating these two numbers is the most likely way this skill is misapplied — do not do it.
@@ -37,12 +37,27 @@ One number to keep consistent between the two: both skills use Node 24.8.0 or hi
 7. Install pnpm with `pnpm/action-setup`, omitting the `version` input so the version is read from the `packageManager` field. Do not use Corepack: it is still marked experimental and downloads the package manager from the network on first use, which is an avoidable failure surface in a release pipeline.
 8. `pnpm/action-setup` does not install Node.js, so always run `actions/setup-node` as a separate step.
 9. Disable setup-node package-manager caching for release/publish workflows with `package-manager-cache: false`.
-10. Set `persist-credentials: false` on every `actions/checkout` step unless a later step must push to git.
+10. Set `persist-credentials: false` on every `actions/checkout` step. Never rely on checkout's default credential persistence. If a workflow genuinely must push to git, use an explicit, narrowly scoped credential only for that push step.
 11. Target Node 24.8.0 or higher in the publish step. That floor bundles npm 11.6.0, which already exceeds the npm CLI 11.5.1 minimum trusted publishing requires, so no manual npm upgrade is needed there. Keep a guard step that upgrades npm only when the resolved Node ships an npm below 11.5.1, so the workflow stays correct if a project pins an older Node. An npm that is too old silently falls back to token auth or fails to attempt OIDC at all.
 12. Pack into a dedicated artifact directory, usually `package/*.tgz`.
 13. In the publish job, download the artifact to `package`, find the `.tgz`, and publish its resolved path.
 14. Use GitHub OIDC trusted publishing, not npm tokens. Provenance is generated automatically under trusted publishing, so the `--provenance` flag is not required.
 15. Add a `concurrency` group keyed on the release so two tag pushes cannot race into overlapping publishes.
+
+## GitHub Token Permissions
+
+Every GitHub Actions workflow this skill creates or edits must declare explicit least-privilege
+`GITHUB_TOKEN` permissions. Add a top-level `permissions:` block that grants the workflow-wide
+minimum, usually `contents: read`, then add job-level `permissions:` only where a job needs more.
+
+For trusted npm publishing, only the publish job should receive `id-token: write`; test and build
+jobs should stay at `contents: read`. If a project genuinely needs another scope, grant it only to
+the specific job that requires it and document why in the workflow review notes. Never rely on
+GitHub's repository default token permissions.
+
+Every `actions/checkout` step must include `persist-credentials: false`, including jobs that build
+or upload artifacts. Persisted checkout credentials unnecessarily leave `GITHUB_TOKEN` available to
+later build, test, packaging, and artifact steps.
 
 ## Package Metadata
 
@@ -219,11 +234,11 @@ jobs:
 
 ## Pinning actions to current SHAs
 
-The template's SHAs are stale by design. Action versions and their commit SHAs change over time, so resolve them fresh whenever a `publish.yml` is created or reviewed. Pin to the full-length commit SHA, never a tag or branch, because a tag can be moved to point at malicious code after you have reviewed it.
+The template's SHAs are stale by design. Action versions and their commit SHAs change over time, so resolve them fresh whenever a `publish.yml` is created or reviewed. Pin to the full-length commit SHA, never a tag or branch, because a tag can be moved to point at malicious code after you have reviewed it. Tag-based refs such as `@v4`, `@v6`, and `@v7` are acceptable only as temporary input to a pinning tool; they must not survive in committed workflow YAML.
 
 There are two reliable ways to produce current pins.
 
-The preferred approach is to let tooling resolve and pin for you. Write the workflow first using human-readable tags (for example `actions/checkout@v4`), then run `npx actions-up` in the repository to rewrite every `uses:` reference to the latest stable release pinned to its commit SHA, with a version comment appended. This is the same tool the `npm-package-publishing` skill recommends, and it removes the chance of a hand-typed SHA being wrong. After it runs, confirm each line carries a `@<40-hex-sha> # vX.Y.Z` form.
+The preferred approach is to let tooling resolve and pin for you. Write the workflow first using human-readable tags only in the temporary draft consumed by the tool (for example `actions/checkout@v4`), then run `npx actions-up` in the repository to rewrite every `uses:` reference to the latest stable release pinned to its commit SHA, with a version comment appended. This is the same tool the `npm-package-publishing` skill recommends, and it removes the chance of a hand-typed SHA being wrong. After it runs, confirm each line carries a `@<40-hex-sha> # vX.Y.Z` form.
 
 If resolving manually, for each action find the latest stable release tag, then read the exact commit that tag points to and pin that commit:
 

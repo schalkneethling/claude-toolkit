@@ -68,7 +68,15 @@ User or authenticated UI/API access required:
 - Do not store npm publish tokens in GitHub Actions secrets for OIDC-capable publishing.
 - Do not run install lifecycle scripts in release workflows unless the user explicitly accepts the
   risk.
-- Do not show tag-pinned actions as compliant with SHA pinning; resolve actions to full commit SHAs.
+- Do not show tag-pinned actions as compliant with SHA pinning; resolve all third-party and
+  GitHub-owned actions to full commit SHAs. Tag-based refs such as `@v6` or `@v7` weaken
+  supply-chain integrity and violate pinned-action policy.
+- Do not create or edit GitHub Actions workflows without explicit least-privilege `permissions:`
+  for `GITHUB_TOKEN`. Set a restrictive top-level default such as `contents: read`, then grant
+  elevated scopes only on the jobs that need them.
+- Do not use `actions/checkout` with default credential persistence. Always set
+  `persist-credentials: false`; if a job must push to git, provide an explicit, narrowly scoped
+  credential only for that push step.
 - Do not say npm/GitHub account settings are complete unless they were actually checked.
 - Do not use self-hosted runners for npm trusted publishing unless official npm docs currently
   support them.
@@ -186,9 +194,26 @@ test  →  build  →  publish
 
 | Constraint                                             | Why                                                         |
 | ------------------------------------------------------ | ----------------------------------------------------------- |
-| All actions pinned to full-length commit SHA           | Prevents supply-chain attacks via action updates            |
+| All actions pinned to full-length commit SHA           | Prevents supply-chain attacks via mutable tags              |
+| Explicit least-privilege `GITHUB_TOKEN` permissions    | Avoids inheriting broad repository defaults                 |
+| `actions/checkout` uses `persist-credentials: false`   | Reduces token exposure to later workflow steps              |
 | `npm ci --ignore-scripts` (or `--ignore-scripts` flag) | Prevents malicious lifecycle scripts running during install |
 | Build and publish in **separate jobs**                 | Isolates publish permissions from arbitrary build code      |
+
+Always include a top-level `permissions:` block with the workflow-wide minimum, usually
+`contents: read`. Add job-level permissions only when a job requires more access; for npm trusted
+publishing, `id-token: write` belongs on the publish job only.
+
+Every checkout step must disable persisted credentials:
+
+```yaml
+- uses: actions/checkout@<full-length-commit-sha>
+  with:
+    persist-credentials: false
+```
+
+This is especially important for jobs that build packages or upload artifacts, because later steps
+should not inherit a repository token unless they explicitly need one.
 
 ### 3.3 · Suppress lifecycle scripts project-wide
 
@@ -245,8 +270,9 @@ addressing security vulnerabilities promptly.
 
 ### 5.2 · Keep GitHub Actions updated
 
-All actions must be pinned to a commit SHA (not a tag). To migrate existing workflows and keep
-them current:
+All third-party and GitHub-owned actions must be pinned to a full commit SHA, not a tag. Tag refs
+such as `@v6` or `@v7` are mutable and must not be committed to workflow files. To migrate existing
+workflows and keep them current:
 
 ```bash
 npx actions-up
@@ -387,6 +413,8 @@ Use this when setting up a new package or auditing an existing one.
 ### Workflow hygiene
 
 - [ ] Build and publish are separate jobs
+- [ ] Workflows declare explicit least-privilege `GITHUB_TOKEN` permissions
+- [ ] Every `actions/checkout` step sets `persist-credentials: false`
 - [ ] `npm ci --ignore-scripts` used in all install steps
 - [ ] `ignore-scripts=true` in `.npmrc`
 - [ ] `zizmor` passes on all workflow files
