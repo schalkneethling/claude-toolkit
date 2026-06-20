@@ -365,9 +365,10 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           git config user.name "CI Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "**/*.png"
           git commit -m "Update visual baselines"
-          git -c http.https://github.com/.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" push
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" push origin HEAD:refs/heads/${GITHUB_REF_NAME}
 ```
 
 ## Organizing Screenshots
