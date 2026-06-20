@@ -1,6 +1,6 @@
 {
   "name": "@schalkneethling/toolkit",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "CLI for managing Agent hooks, skills, and agents across projects.",
   "license": "MIT",
   "bin": {
@@ -31,5 +31,5 @@
     "typescript": "^6.0.2",
     "vite-plus": "^0.1.18"
   },
-  "packageManager": "pnpm@11.1.1"
+  "packageManager": "pnpm@11.8.0"
 }
