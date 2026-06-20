@@ -18,11 +18,13 @@
 import { createHash } from "node:crypto";
 import {
   cpSync,
+  type Dirent,
   existsSync,
   lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
   symlinkSync,
   unlinkSync,
@@ -66,6 +68,28 @@ type ResolvedCollectionItem = {
   sourcePath: string;
   sourceName: string;
   type: CollectionItemKind;
+};
+type SourceKind = "directory" | "file";
+type ResourceConfig = {
+  manifestKey: keyof Manifest;
+  sourceRoot: string;
+  sourceKind: SourceKind;
+  sourcePath: (name: string) => string;
+  installPath: (name: string) => string;
+  hashSource: (sourcePath: string) => string;
+  copySource: (sourcePath: string, installPath: string) => void;
+  readSourceText: (sourcePath: string) => string;
+  checksLocalModification: boolean;
+  listName: (entryName: string) => string;
+  listFilter: (entry: Dirent) => boolean;
+};
+type LinkedResourceKind = "skill" | "agent";
+type LinkedResourceConfig = ResourceConfig & {
+  manifestKey: "skills" | "agents";
+  installRoot: string;
+  defaultLinkTarget: string;
+  linkName: (name: string) => string;
+  symlinkType: "dir" | "file";
 };
 
 // ---------- helpers ----------
@@ -118,17 +142,15 @@ function deepMerge<T>(target: T, source: T): T {
   return source;
 }
 
-function hashHookSource(name: string): string {
-  const p = join(HOOKS_SRC, name, "hook.mjs");
-  return shortHash(readFileSync(p));
+function hashHookPath(sourcePath: string): string {
+  return shortHash(readFileSync(join(sourcePath, "hook.mjs")));
 }
 
-function hashSkillSource(name: string): string {
-  const dir = join(SKILLS_SRC, name);
-  const files = collectFiles(dir).sort();
+function hashDirectorySource(sourcePath: string): string {
+  const files = collectFiles(sourcePath).sort();
   const h = createHash("sha256");
   for (const f of files) {
-    h.update(relative(dir, f));
+    h.update(relative(sourcePath, f));
     h.update("\0");
     h.update(readFileSync(f));
     h.update("\0");
@@ -136,8 +158,8 @@ function hashSkillSource(name: string): string {
   return h.digest("hex").slice(0, 7);
 }
 
-function hashAgentSource(name: string): string {
-  return shortHash(readFileSync(join(AGENTS_SRC, `${name}.md`)));
+function hashFileSource(sourcePath: string): string {
+  return shortHash(readFileSync(sourcePath));
 }
 
 function collectFiles(dir: string): string[] {
@@ -159,6 +181,74 @@ function collectFiles(dir: string): string[] {
     }
   }
   return out;
+}
+
+const RESOURCE_CONFIGS = {
+  hook: {
+    manifestKey: "hooks",
+    sourceRoot: HOOKS_SRC,
+    sourceKind: "directory",
+    sourcePath: (name: string) => join(HOOKS_SRC, name),
+    installPath: (name: string) => join(CLAUDE_DIR, "hooks", `${name}.mjs`),
+    hashSource: hashHookPath,
+    copySource: (sourcePath: string, installPath: string) => {
+      mkdirSync(dirname(installPath), { recursive: true });
+      writeFileSync(installPath, readFileSync(join(sourcePath, "hook.mjs")));
+    },
+    readSourceText: (sourcePath: string) => readFileSync(join(sourcePath, "hook.mjs"), "utf8"),
+    checksLocalModification: true,
+    listName: (entryName: string) => entryName,
+    listFilter: (entry: Dirent) => entry.isDirectory(),
+  },
+  skill: {
+    manifestKey: "skills",
+    sourceRoot: SKILLS_SRC,
+    sourceKind: "directory",
+    sourcePath: (name: string) => join(SKILLS_SRC, name),
+    installPath: (name: string) => resolve(TOOLKIT_DIR, "skills", name),
+    hashSource: hashDirectorySource,
+    copySource: (sourcePath: string, installPath: string) => {
+      mkdirSync(dirname(installPath), { recursive: true });
+      rmSync(installPath, { force: true, recursive: true });
+      cpSync(sourcePath, installPath, { recursive: true });
+    },
+    readSourceText: () => "",
+    checksLocalModification: false,
+    listName: (entryName: string) => entryName,
+    listFilter: (entry: Dirent) => entry.isDirectory() || entry.isSymbolicLink(),
+    installRoot: join(TOOLKIT_DIR, "skills"),
+    defaultLinkTarget: join(".claude", "skills"),
+    linkName: (name: string) => name,
+    symlinkType: "dir",
+  },
+  agent: {
+    manifestKey: "agents",
+    sourceRoot: AGENTS_SRC,
+    sourceKind: "file",
+    sourcePath: (name: string) => join(AGENTS_SRC, `${name}.md`),
+    installPath: (name: string) => resolve(TOOLKIT_DIR, "agents", `${name}.md`),
+    hashSource: hashFileSource,
+    copySource: (sourcePath: string, installPath: string) => {
+      mkdirSync(dirname(installPath), { recursive: true });
+      writeFileSync(installPath, readFileSync(sourcePath));
+    },
+    readSourceText: (sourcePath: string) => readFileSync(sourcePath, "utf8"),
+    checksLocalModification: true,
+    listName: (entryName: string) => basename(entryName, ".md"),
+    listFilter: (entry: Dirent) => entry.isFile() && entry.name.endsWith(".md"),
+    installRoot: join(TOOLKIT_DIR, "agents"),
+    defaultLinkTarget: join(".claude", "agents"),
+    linkName: (name: string) => `${name}.md`,
+    symlinkType: "file",
+  },
+} satisfies Record<CollectionItemKind, ResourceConfig | LinkedResourceConfig>;
+
+function resourceConfig(kind: CollectionItemKind): ResourceConfig {
+  return RESOURCE_CONFIGS[kind];
+}
+
+function linkedResourceConfig(kind: LinkedResourceKind): LinkedResourceConfig {
+  return RESOURCE_CONFIGS[kind];
 }
 
 async function confirm(question: string): Promise<boolean> {
@@ -237,23 +327,23 @@ function inferItemNameFromSource(
   sourcePath: string,
   collectionName: string,
 ): string {
-  const expectedRoot = type === "hook" ? HOOKS_SRC : type === "skill" ? SKILLS_SRC : AGENTS_SRC;
+  const config = resourceConfig(type);
+  const expectedRoot = config.sourceRoot;
   if (dirname(sourcePath) !== expectedRoot || !sourcePath.startsWith(expectedRoot + sep)) {
     throw new Error(
       `Collection "${collectionName}" ${type} source must point to a top-level entry under ${relative(TOOLKIT_ROOT, expectedRoot)}/: ${relative(TOOLKIT_ROOT, sourcePath)}`,
     );
   }
 
-  if (type === "agent") {
+  if (config.sourceKind === "file") {
     if (!sourcePath.endsWith(".md")) {
       throw new Error(
         `Collection "${collectionName}" agent source must point to a Markdown file: ${relative(TOOLKIT_ROOT, sourcePath)}`,
       );
     }
-    return basename(sourcePath, ".md");
   }
 
-  return basename(sourcePath);
+  return config.listName(basename(sourcePath));
 }
 
 function readCollectionsConfig(): CollectionConfig[] {
@@ -380,7 +470,8 @@ function installHook(name: string, srcDir: string): void {
   }
 
   const manifest = readManifest();
-  manifest.hooks[name] = { hash: hashHookSource(name), installedAt: today() };
+  const config = resourceConfig("hook");
+  manifest.hooks[name] = { hash: config.hashSource(config.sourcePath(name)), installedAt: today() };
   writeManifest(manifest);
 
   console.log(`Installed hook: ${name} → ${relative(PROJECT_ROOT, destHook)}`);
@@ -391,99 +482,67 @@ function addHook(name: string): void {
   installHook(name, join(HOOKS_SRC, name));
 }
 
-function installSkill(name: string, srcDir: string, links: string[]): void {
-  if (!existsSync(srcDir) || !statSync(srcDir).isDirectory()) {
-    console.error(`Skill not found: ${name}`);
+function sourceExists(sourcePath: string, sourceKind: SourceKind): boolean {
+  if (!existsSync(sourcePath)) {
+    return false;
+  }
+
+  const stats = statSync(sourcePath);
+  return sourceKind === "directory" ? stats.isDirectory() : stats.isFile();
+}
+
+function installLinkedResource(
+  kind: LinkedResourceKind,
+  name: string,
+  sourcePath: string,
+  links: string[],
+): void {
+  const config = linkedResourceConfig(kind);
+  if (!sourceExists(sourcePath, config.sourceKind)) {
+    console.error(`${kind.slice(0, 1).toUpperCase() + kind.slice(1)} not found: ${name}`);
     process.exit(1);
   }
 
-  const destDir = resolve(TOOLKIT_DIR, "skills", name);
-  if (!destDir.startsWith(join(TOOLKIT_DIR, "skills") + sep)) {
-    console.error("Invalid skill name");
+  const installPath = config.installPath(name);
+  if (!installPath.startsWith(config.installRoot + sep)) {
+    console.error(`Invalid ${kind} name`);
     process.exit(1);
   }
-  mkdirSync(dirname(destDir), { recursive: true });
-  cpSync(srcDir, destDir, { recursive: true });
 
-  const resolvedLinks = links.length > 0 ? links : [join(".claude", "skills")];
+  config.copySource(sourcePath, installPath);
+
+  const resolvedLinks = links.length > 0 ? links : [config.defaultLinkTarget];
+  const linkName = config.linkName(name);
   for (const link of resolvedLinks) {
     const linkDir = resolve(PROJECT_ROOT, link);
     mkdirSync(linkDir, { recursive: true });
 
-    const linkPath = join(linkDir, name);
+    const linkPath = join(linkDir, linkName);
     if (existsSync(linkPath) || lstatExists(linkPath)) {
       unlinkSync(linkPath);
     }
 
-    const relTarget = relative(linkDir, destDir);
-    symlinkSync(relTarget, linkPath, "dir");
+    const relTarget = relative(linkDir, installPath);
+    symlinkSync(relTarget, linkPath, config.symlinkType);
   }
 
   const manifest = readManifest();
-  manifest.skills[name] = {
-    hash: hashSkillSource(name),
+  manifest[config.manifestKey][name] = {
+    hash: config.hashSource(sourcePath),
     installedAt: today(),
     linkedTo: resolvedLinks,
   };
   writeManifest(manifest);
 
-  console.log(`Installed skill: ${name} → ${relative(PROJECT_ROOT, destDir)}`);
+  console.log(`Installed ${kind}: ${name} → ${relative(PROJECT_ROOT, installPath)}`);
   for (const l of resolvedLinks) {
-    console.log(`  linked: ${join(l, name)}`);
+    console.log(`  linked: ${join(l, linkName)}`);
   }
 }
 
-function addSkill(name: string, links: string[]): void {
-  name = sanitizeName(name, "skill");
-  installSkill(name, join(SKILLS_SRC, name), links);
-}
-
-function installAgent(name: string, srcFile: string, links: string[]): void {
-  if (!existsSync(srcFile) || !statSync(srcFile).isFile()) {
-    console.error(`Agent not found: ${name}`);
-    process.exit(1);
-  }
-
-  const agentsRoot = join(TOOLKIT_DIR, "agents");
-  const destFile = resolve(agentsRoot, `${name}.md`);
-  if (!destFile.startsWith(agentsRoot + sep)) {
-    console.error("Invalid agent name");
-    process.exit(1);
-  }
-  mkdirSync(dirname(destFile), { recursive: true });
-  writeFileSync(destFile, readFileSync(srcFile));
-
-  const resolvedLinks = links.length > 0 ? links : [join(".claude", "agents")];
-  for (const link of resolvedLinks) {
-    const linkDir = resolve(PROJECT_ROOT, link);
-    mkdirSync(linkDir, { recursive: true });
-
-    const linkPath = join(linkDir, `${name}.md`);
-    if (existsSync(linkPath) || lstatExists(linkPath)) {
-      unlinkSync(linkPath);
-    }
-
-    const relTarget = relative(linkDir, destFile);
-    symlinkSync(relTarget, linkPath, "file");
-  }
-
-  const manifest = readManifest();
-  manifest.agents[name] = {
-    hash: hashAgentSource(name),
-    installedAt: today(),
-    linkedTo: resolvedLinks,
-  };
-  writeManifest(manifest);
-
-  console.log(`Installed agent: ${name} → ${relative(PROJECT_ROOT, destFile)}`);
-  for (const l of resolvedLinks) {
-    console.log(`  linked: ${join(l, `${name}.md`)}`);
-  }
-}
-
-function addAgent(name: string, links: string[]): void {
-  name = sanitizeAgentName(name);
-  installAgent(name, join(AGENTS_SRC, `${name}.md`), links);
+function addLinkedResource(kind: LinkedResourceKind, name: string, links: string[]): void {
+  name = kind === "agent" ? sanitizeAgentName(name) : sanitizeName(name, kind);
+  installLinkedResource(kind, name, linkedResourceConfig(kind).sourcePath(name), links);
 }
 
 function addCollection(name: string): void {
@@ -495,6 +554,7 @@ function addCollection(name: string): void {
       );
     }
 
+    const config = resourceConfig(item.type);
     const itemStats = statSync(item.sourcePath);
     const actualKind = itemStats.isFile()
       ? "file"
@@ -502,32 +562,17 @@ function addCollection(name: string): void {
         ? "directory"
         : "other";
 
-    if (item.type === "hook") {
-      if (!itemStats.isDirectory()) {
-        throw new Error(
-          `Collection "${item.collection}" expected hook source "${item.sourcePath}" to be a directory, found ${actualKind}`,
-        );
-      }
-      installHook(item.sourceName, item.sourcePath);
-      continue;
-    }
-
-    if (item.type === "skill") {
-      if (!itemStats.isDirectory()) {
-        throw new Error(
-          `Collection "${item.collection}" expected skill source "${item.sourcePath}" to be a directory, found ${actualKind}`,
-        );
-      }
-      installSkill(item.sourceName, item.sourcePath, []);
-      continue;
-    }
-
-    if (!itemStats.isFile()) {
+    if (!sourceExists(item.sourcePath, config.sourceKind)) {
       throw new Error(
-        `Collection "${item.collection}" expected agent source "${item.sourcePath}" to be a file, found ${actualKind}`,
+        `Collection "${item.collection}" expected ${item.type} source "${item.sourcePath}" to be a ${config.sourceKind}, found ${actualKind}`,
       );
     }
-    installAgent(item.sourceName, item.sourcePath, []);
+
+    if (item.type === "hook") {
+      installHook(item.sourceName, item.sourcePath);
+    } else {
+      installLinkedResource(item.type, item.sourceName, item.sourcePath, []);
+    }
   }
 }
 
@@ -540,19 +585,30 @@ function lstatExists(p: string): boolean {
   }
 }
 
-async function update(force: boolean): Promise<void> {
-  const manifest = readManifest();
+async function updateResources(
+  kind: CollectionItemKind,
+  manifest: Manifest,
+  force: boolean,
+): Promise<boolean> {
+  const config = resourceConfig(kind);
+  const entries = manifest[config.manifestKey] as Record<
+    string,
+    HookEntry | SkillEntry | AgentEntry
+  >;
   let changed = false;
 
-  for (const [name, entry] of Object.entries(manifest.hooks)) {
-    const srcDir = join(HOOKS_SRC, name);
-    if (!existsSync(srcDir)) {
+  for (const [name, entry] of Object.entries(entries)) {
+    const sourcePath = config.sourcePath(name);
+    if (!existsSync(sourcePath)) {
       continue;
     }
 
-    const sourceHash = hashHookSource(name);
-    const installedPath = join(CLAUDE_DIR, "hooks", `${name}.mjs`);
-    const installedHash = existsSync(installedPath) ? shortHash(readFileSync(installedPath)) : null;
+    const sourceHash = config.hashSource(sourcePath);
+    const installPath = config.installPath(name);
+    const installedHash =
+      config.checksLocalModification && existsSync(installPath)
+        ? shortHash(readFileSync(installPath))
+        : null;
 
     const sourceChanged = sourceHash !== entry.hash;
     const locallyModified = installedHash !== null && installedHash !== entry.hash;
@@ -565,100 +621,46 @@ async function update(force: boolean): Promise<void> {
 
     if (locallyModified && !force) {
       console.warn(
-        `! hook "${name}" was modified locally (installed=${installedHash}, manifest=${entry.hash}). Use --force to overwrite.`,
+        `! ${kind} "${name}" was modified locally (installed=${installedHash}, manifest=${entry.hash}). Use --force to overwrite.`,
       );
       continue;
     }
 
-    if (sourceChanged) {
-      const oldSrc = existsSync(installedPath) ? readFileSync(installedPath, "utf8") : "";
-      const newSrc = readFileSync(join(srcDir, "hook.mjs"), "utf8");
-      console.log(`\n~ hook: ${name} (${entry.hash} → ${sourceHash})`);
-      console.log(diffLines(oldSrc, newSrc));
-      const ok = force || (await confirm(`Update hook "${name}"?`));
-
-      if (!ok) {
-        continue;
-      }
-
-      writeFileSync(installedPath, newSrc);
-      manifest.hooks[name] = { hash: sourceHash, installedAt: today() };
-    }
-  }
-
-  for (const [name, entry] of Object.entries(manifest.skills)) {
-    const srcDir = join(SKILLS_SRC, name);
-    if (!existsSync(srcDir)) {
+    if (!sourceChanged && !force) {
       continue;
     }
 
-    const sourceHash = hashSkillSource(name);
-    if (sourceHash === entry.hash) {
-      continue;
+    console.log(`\n~ ${kind}: ${name} (${entry.hash} → ${sourceHash})`);
+    if (config.checksLocalModification) {
+      const oldSrc = existsSync(installPath) ? readFileSync(installPath, "utf8") : "";
+      console.log(diffLines(oldSrc, config.readSourceText(sourcePath)));
     }
 
-    changed = true;
-    console.log(`\n~ skill: ${name} (${entry.hash} → ${sourceHash})`);
-    const ok = force || (await confirm(`Update skill "${name}"?`));
+    const ok = force || (await confirm(`Update ${kind} "${name}"?`));
     if (!ok) {
       continue;
     }
 
-    const destDir = join(TOOLKIT_DIR, "skills", name);
-    cpSync(srcDir, destDir, { recursive: true, force: true });
-    manifest.skills[name] = {
-      hash: sourceHash,
-      installedAt: today(),
-      linkedTo: entry.linkedTo,
-    };
-  }
-
-  for (const [name, entry] of Object.entries(manifest.agents)) {
-    const srcFile = join(AGENTS_SRC, `${name}.md`);
-    if (!existsSync(srcFile)) {
-      continue;
-    }
-
-    const sourceHash = hashAgentSource(name);
-    const destFile = join(TOOLKIT_DIR, "agents", `${name}.md`);
-    const installedHash = existsSync(destFile) ? shortHash(readFileSync(destFile)) : null;
-
-    const sourceChanged = sourceHash !== entry.hash;
-    const locallyModified = installedHash !== null && installedHash !== entry.hash;
-
-    if (!sourceChanged && !locallyModified) {
-      continue;
-    }
-
-    changed = true;
-
-    if (locallyModified && !force) {
-      console.warn(
-        `! agent "${name}" was modified locally (installed=${installedHash}, manifest=${entry.hash}). Use --force to overwrite.`,
-      );
-      continue;
-    }
-
-    if (sourceChanged) {
-      const oldSrc = existsSync(destFile) ? readFileSync(destFile, "utf8") : "";
-      const newSrc = readFileSync(srcFile, "utf8");
-      console.log(`\n~ agent: ${name} (${entry.hash} → ${sourceHash})`);
-      console.log(diffLines(oldSrc, newSrc));
-      const ok = force || (await confirm(`Update agent "${name}"?`));
-
-      if (!ok) {
-        continue;
-      }
-
-      mkdirSync(dirname(destFile), { recursive: true });
-      writeFileSync(destFile, newSrc);
-      manifest.agents[name] = {
+    config.copySource(sourcePath, installPath);
+    if (kind === "hook") {
+      manifest.hooks[name] = { hash: sourceHash, installedAt: today() };
+    } else {
+      manifest[linkedResourceConfig(kind).manifestKey][name] = {
         hash: sourceHash,
         installedAt: today(),
-        linkedTo: entry.linkedTo,
+        linkedTo: (entry as SkillEntry | AgentEntry).linkedTo,
       };
     }
   }
+
+  return changed;
+}
+
+async function update(force: boolean): Promise<void> {
+  const manifest = readManifest();
+  let changed = await updateResources("hook", manifest, force);
+  changed = (await updateResources("skill", manifest, force)) || changed;
+  changed = (await updateResources("agent", manifest, force)) || changed;
 
   if (changed) {
     writeManifest(manifest);
@@ -666,18 +668,15 @@ async function update(force: boolean): Promise<void> {
 }
 
 function list(kind: CollectionItemKind): void {
-  const dir = kind === "hook" ? HOOKS_SRC : kind === "skill" ? SKILLS_SRC : AGENTS_SRC;
+  const config = resourceConfig(kind);
+  const dir = config.sourceRoot;
   if (!existsSync(dir)) {
     console.log(`(no ${kind}s available)`);
     return;
   }
   const entries = readdirSync(dir, { withFileTypes: true })
-    .filter(
-      (e) =>
-        (kind !== "agent" && (e.isDirectory() || (kind === "skill" && e.isSymbolicLink()))) ||
-        (kind === "agent" && e.isFile() && e.name.endsWith(".md")),
-    )
-    .map((e) => (kind === "agent" ? basename(e.name, ".md") : e.name));
+    .filter(config.listFilter)
+    .map((e) => config.listName(e.name));
 
   if (entries.length === 0) {
     console.log(`(no ${kind}s available)`);
@@ -685,8 +684,7 @@ function list(kind: CollectionItemKind): void {
   }
 
   for (const name of entries) {
-    const hash =
-      kind === "hook" ? hashHookSource(name) : kind === "skill" ? hashSkillSource(name) : hashAgentSource(name);
+    const hash = config.hashSource(config.sourcePath(name));
     console.log(`${name}  ${hash}`);
   }
 }
@@ -758,7 +756,7 @@ async function main(): Promise<void> {
       usage();
     }
 
-    addSkill(name, linkTargets);
+    addLinkedResource("skill", name, linkTargets);
     return;
   }
 
@@ -767,7 +765,7 @@ async function main(): Promise<void> {
       usage();
     }
 
-    addAgent(name, linkTargets);
+    addLinkedResource("agent", name, linkTargets);
     return;
   }
 
