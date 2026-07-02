@@ -1,5 +1,14 @@
 # claude-toolkit
 
+> [!IMPORTANT]
+> `claude-toolkit` is deprecated. Its AI artifact management has moved to
+> [create-project-calavera](https://github.com/schalkneethling/create-project-calavera).
+> Use Calavera's `ai` section in `calavera.config.json` and run
+> `create-project-calavera apply` to install bundled skills, hooks, and agents.
+> See the
+> [Calavera migration guide](https://github.com/schalkneethling/create-project-calavera/blob/main/MIGRATION.md)
+> for the phase-one migration path.
+
 CLI for managing [Claude Code](https://claude.com/claude-code) hooks, skills, agents, and collections across projects. Hooks are copied into a project's `.claude/` directory; skills and agents are copied into `.claude-toolkit/` and symlinked into wherever Claude Code expects to find them; collections install any combination of those resources from a bundled root config.
 
 ## Repo layout

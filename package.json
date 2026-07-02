@@ -1,7 +1,7 @@
 {
   "name": "@schalkneethling/toolkit",
   "version": "1.2.1",
-  "description": "CLI for managing Agent hooks, skills, and agents across projects.",
+  "description": "Deprecated: AI artifact management has moved to create-project-calavera.",
   "license": "MIT",
   "bin": {
     "toolkit": "./dist/index.mjs"
